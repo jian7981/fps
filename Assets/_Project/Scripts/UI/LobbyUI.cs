@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
+using Shared;
 
 public class LobbyUI : MonoBehaviour
 {
@@ -12,28 +13,22 @@ public class LobbyUI : MonoBehaviour
 
     private void Start()
     {
-        if (mapGameButton != null)
+        if(mapGameButton != null && lobbyManager !=null)
         {
-            mapGameButton.onClick.AddListener(() =>
-            {
-                if (lobbyManager != null)
-                    lobbyManager.SelectMap("map1");
-                else
-                    Debug.LogError("LobbyManager 没有赋值！");
-            });
+            mapGameButton.onClick.AddListener(() => lobbyManager.SelectMap(Constants.GameSceneName));
         }
         else
         {
-            Debug.LogError("mapGameButton 没有赋值！去Canvas的LobbyUI面板拖入按钮");
-        }
+            Debug.LogError("mapGameButton 或 lobbyManager 没有赋值");
 
-        if (startSingleBtn != null && lobbyManager != null)
+        }
+        if(startSingleBtn !=null && lobbyManager != null)
         {
             startSingleBtn.onClick.AddListener(lobbyManager.StartSinglePlayerGame);
         }
         else
         {
-            Debug.LogError("startSingleBtn 或 lobbyManager 没有赋值！");
+            Debug.LogError("startSingleBtn或lobbyManager 没有赋值");
         }
     }
 }

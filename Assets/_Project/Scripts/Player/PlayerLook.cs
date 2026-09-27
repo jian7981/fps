@@ -1,8 +1,8 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class PlayerLook : MonoBehaviour
 {
-    [Header("�ӽǲ���")]
+    [Header("视角参数")]
     public Camera cam;
     public float mouseSensitivity = 200f;
 
@@ -12,6 +12,8 @@ public class PlayerLook : MonoBehaviour
     {
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+        if (cam != null)
+            cam.nearClipPlane = 0.01f; // 防止贴墙时看到墙内部（透视）
     }
 
     void Update()

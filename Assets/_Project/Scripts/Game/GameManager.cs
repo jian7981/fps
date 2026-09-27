@@ -5,36 +5,40 @@ public class GameManager : MonoBehaviour
     [Header("玩家预制体")]
     public GameObject playerPrefab;
 
-    [Header("===== 出生点设置 5v5 =====")]
-    public Transform[] teamASpawnPoints;
-    public Transform[] teamBSpawnPoints;
+    [Header("出生点设置 5V5")]
+    public Transform[] teamASpawnPoints; // 队伍A的出生点
+    public Transform[] teamBSpawnPoints; // 队伍B的出生点
 
     private void Start()
     {
-        // GameManager只在map1场景存在，直接生成玩家
+        //Gamemanager 只在map1存在，直接生成玩家
         SpawnPlayerSingle();
     }
 
     void SpawnPlayerSingle()
     {
-        if (playerPrefab == null)
+        if(playerPrefab == null)
         {
-            Debug.LogError("playerPrefab 没有赋值！");
+            Debug.LogError("玩家预制体未设置！");
             return;
         }
-        if (teamASpawnPoints == null || teamASpawnPoints.Length == 0)
+        if(teamASpawnPoints==null || teamASpawnPoints.Length == 0)
         {
-            Debug.LogError("A队出生点数组为空！");
+            Debug.LogError("队伍A出生点未设置！");
             return;
         }
         Transform spawnPos = teamASpawnPoints[0];
         Instantiate(playerPrefab, spawnPos.position, spawnPos.rotation);
-        Debug.Log("单机：玩家生成成功，出生位置：" + spawnPos.name);
+        Debug.Log("玩家已生成在队伍A出生点：" + spawnPos.name);
     }
-
     public Transform GetRandomSpawnPoint(int teamId)
     {
         Transform[] targetSpawns = (teamId == 0) ? teamASpawnPoints : teamBSpawnPoints;
+        if(targetSpawns==null||targetSpawns.Length == 0)
+        {
+            Debug.LogWarning("队伍" + teamId + "没有出生点，回退到队伍A");
+            targetSpawns = teamASpawnPoints;
+        }
         int randomIndex = Random.Range(0, targetSpawns.Length);
         return targetSpawns[randomIndex];
     }

@@ -39,3 +39,6 @@ Desktop.ini
 *.unitypackage
 sysinfo.txt
 crashlytics-build.properties
+
+# ParrelSync克隆
+*_Clone/
