@@ -1,0 +1,420 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4d18c665cf3f00498f285b0445923c1, type: 3}
+  m_Name: Player SO
+  m_EditorClassIdentifier: 
+  <playerMovementData>k__BackingField:
+    <PlayerIdleData>k__BackingField:
+      <idle>k__BackingField: {fileID: 11400000, guid: 332d7aac94dee8344a532cd1faca4aa8,
+        type: 2}
+      <strandIdle_Lock>k__BackingField: []
+      <crouchIdle_Lock>k__BackingField: []
+      <strandIdle>k__BackingField: []
+      <crouchIdle>k__BackingField: []
+    <PlayerMoveStartData>k__BackingField:
+      <moveStart>k__BackingField: {fileID: 11400000, guid: 60f8c68084a2fac469a2ce692d12c90a,
+        type: 2}
+      <moveStart_F>k__BackingField: {fileID: 11400000, guid: 60f8c68084a2fac469a2ce692d12c90a,
+        type: 2}
+      <moveStart_L45>k__BackingField: {fileID: 11400000, guid: be52c68bdc1eace46a628e2c1a646268,
+        type: 2}
+      <moveStart_L90>k__BackingField: {fileID: 11400000, guid: 849c0c81f46ed754f983984f3e53530a,
+        type: 2}
+      <moveStart_L135>k__BackingField: {fileID: 11400000, guid: 300de475731cb84429674e4a4896258f,
+        type: 2}
+      <moveStart_L180>k__BackingField: {fileID: 11400000, guid: 02b24c2a2b8bf6745bca4a44693e5154,
+        type: 2}
+      <moveStart_R45>k__BackingField: {fileID: 11400000, guid: 2d7b70df949118d4d8785fec63f3b966,
+        type: 2}
+      <moveStart_R90>k__BackingField: {fileID: 11400000, guid: 2d37e1f5b28bead4ebbbd88069f9e971,
+        type: 2}
+      <moveStart_R135>k__BackingField: {fileID: 11400000, guid: 39607935205f0014ebc1e2a97587558f,
+        type: 2}
+      <moveStart_R180>k__BackingField: {fileID: 11400000, guid: e617ef6da8f9a4d4280e6b759341554a,
+        type: 2}
+    <PlayerMoveLoopData>k__BackingField:
+      <moveLoop>k__BackingField: {fileID: 11400000, guid: c4d72ffdfc3326c4082db72d2c1738cb,
+        type: 2}
+    <PlayerMoveEndData>k__BackingField:
+      <moveEnd_L>k__BackingField: {fileID: 11400000, guid: 1cf926f503199d3449b0ba8997b9703e,
+        type: 2}
+      <moveEnd_R>k__BackingField: {fileID: 11400000, guid: d395dfc6341c6dc458176bf775fda299,
+        type: 2}
+      <moveToWall>k__BackingField:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: 13f4277778fb44f4087d6b5e207265f0, type: 2}
+        _NormalizedStartTime: NaN
+    <PlayerClimbData>k__BackingField:
+      vaults:
+      - _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.45622486
+          - 1.0020545
+          _Callbacks: []
+          _Names:
+          - {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb, type: 2}
+        _Clip: {fileID: 7400000, guid: 4fe43a0ae15a8af4db22d74abfc07f30, type: 2}
+        _NormalizedStartTime: 0
+      climbs:
+      - _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.64173573
+          - NaN
+          _Callbacks: []
+          _Names:
+          - {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb, type: 2}
+        _Clip: {fileID: 7400050, guid: dd4bc59541169e34ead96f0310ddc7bd, type: 3}
+        _NormalizedStartTime: 0
+      - _FadeDuration: 0.21666668
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.5146872
+          - 0.63473815
+          _Callbacks: []
+          _Names:
+          - {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb, type: 2}
+        _Clip: {fileID: 7400000, guid: 83d376002a9e4e341b641a0c53d425ec, type: 2}
+        _NormalizedStartTime: 0
+      - _FadeDuration: 0.116000004
+        _Speed: 0.8
+        _Events:
+          _NormalizedTimes:
+          - 0.78480697
+          - 0.96
+          _Callbacks: []
+          _Names:
+          - {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb, type: 2}
+        _Clip: {fileID: 7400000, guid: 7c36225855c99664f83befdf443c5725, type: 2}
+        _NormalizedStartTime: 0
+      vaultSettings:
+      - startMatchTime: {x: 0, y: 0.15}
+        targetMatchTime: {x: 0.15, y: 0.25}
+        targetHeightOffSet: 0.05
+        startMatchDistanceOffset: -0.05
+        enableCCTimeOffset: 0
+      climbSettings:
+      - startMatchTime: {x: 0, y: 0.1}
+        targetMatchTime: {x: 0.1, y: 0.29}
+        targetHeightOffSet: 0
+        startMatchDistanceOffset: -0.15
+        enableCCTimeOffset: 0
+      - startMatchTime: {x: 0, y: 0.2}
+        targetMatchTime: {x: 0.2, y: 0.3}
+        targetHeightOffSet: 0
+        startMatchDistanceOffset: 0.02
+        enableCCTimeOffset: 0.1
+      - startMatchTime: {x: 0, y: 0.08}
+        targetMatchTime: {x: 0.1, y: 0.51}
+        targetHeightOffSet: 0.01
+        startMatchDistanceOffset: 0.22
+        enableCCTimeOffset: 0.1
+      - startMatchTime: {x: 0, y: 0.1}
+        targetMatchTime: {x: 0.3, y: 0.4}
+        targetHeightOffSet: -0.08
+        startMatchDistanceOffset: 0.15
+        enableCCTimeOffset: 0.1
+      outwardCorner_Left:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 0}
+        _NormalizedStartTime: NaN
+      outwardCorner_Right:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 0}
+        _NormalizedStartTime: NaN
+      inwardCorner_Left:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 0}
+        _NormalizedStartTime: NaN
+      inwardCorner_right:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 0}
+        _NormalizedStartTime: NaN
+    <PlayerHangWallData>k__BackingField:
+      hightAndForwardOffSet: {x: -1.35, y: 0.19}
+      hang_wall_idle_down:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: c1a532ed8acb9df44a6d4d5ca3ef5495, type: 2}
+        _NormalizedStartTime: NaN
+      hang_wall_idle_up:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: c1a532ed8acb9df44a6d4d5ca3ef5495, type: 2}
+        _NormalizedStartTime: NaN
+      hang_wall_idle_frond:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: 85bbd875a5207fb4c8b013458d5a3b54, type: 2}
+        _NormalizedStartTime: NaN
+      hang_wall_climb:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 0}
+        _NormalizedStartTime: NaN
+      hang_wall_idle:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: 30e8dd3234cc04a41b8a057f74e60186, type: 2}
+        _NormalizedStartTime: NaN
+      hang_wall_idle_right_inertia:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: 54c7504eda2d54a43b7f815e7f7016a2, type: 2}
+        _NormalizedStartTime: NaN
+      hang_wall_idle_left_inertia:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: c4139b3a28a95264baf1adc5424daa2b, type: 2}
+        _NormalizedStartTime: NaN
+      hand_wallMove_Mixer: {fileID: 11400000, guid: f428a895456abc0459ec48a7061ba6a5,
+        type: 2}
+      hang_wall_climb_up:
+        _FadeDuration: 0.19166668
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.8358482
+          - 0.88660264
+          _Callbacks: []
+          _Names:
+          - {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb, type: 2}
+        _Clip: {fileID: 7400000, guid: 16df6ac7ea6cce144a2d495779a5ab47, type: 2}
+        _NormalizedStartTime: NaN
+      hang_wall_idle_inertia_01:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: ea2c3adba7b4b5d4b828a420103f198f, type: 2}
+        _NormalizedStartTime: NaN
+      hang_wall_idle_jump_out_left:
+        _FadeDuration: 0.08000002
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.9
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: a996433170e7e8f4891b76ea5df51582, type: 2}
+        _NormalizedStartTime: NaN
+      hang_wall_idle_jump_out_right:
+        _FadeDuration: 0.08000002
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.9
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: fe9e0bde38b6b4245a677c54a4104b7a, type: 2}
+        _NormalizedStartTime: NaN
+      hang_wall_idle_jump_out_up:
+        _FadeDuration: 0.12666667
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.92
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: 8557c28fef89e2e4eb55a433ae569b14, type: 2}
+        _NormalizedStartTime: NaN
+    <PlayerJumpFallAndLandData>k__BackingField:
+      <placeJumpStart>k__BackingField:
+        _FadeDuration: 0.1
+        _Speed: 0.4
+        _Events:
+          _NormalizedTimes:
+          - 0.7
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: f1aa01a1ae316e341a90e023a4d7f074, type: 2}
+        _NormalizedStartTime: 0.25
+      <forwardJumpStart>k__BackingField:
+        _FadeDuration: 0.11666667
+        _Speed: 0.4
+        _Events:
+          _NormalizedTimes:
+          - 0.7
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: 96badaec63604d64085f487e686f1bba, type: 2}
+        _NormalizedStartTime: 0.12
+      <fallStart>k__BackingField:
+        _FadeDuration: 0.14
+        _Speed: 0.5
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: a4c254a083ac9954ebc0edaf490a2ddb, type: 2}
+        _NormalizedStartTime: 0
+      <fall>k__BackingField:
+        _FadeDuration: 0.13000001
+        _Speed: 1.1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400000, guid: 890a07b1827bed54d8f196abd204522c, type: 2}
+        _NormalizedStartTime: NaN
+      <placeJumpLand>k__BackingField:
+      - _FadeDuration: 0.08433334
+        _Speed: 1.2
+        _Events:
+          _NormalizedTimes:
+          - 0.2
+          - 0.6939343
+          _Callbacks: []
+          _Names:
+          - {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb, type: 2}
+        _Clip: {fileID: 7400126, guid: dd4bc59541169e34ead96f0310ddc7bd, type: 3}
+        _NormalizedStartTime: NaN
+      - _FadeDuration: 0.08433334
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.73
+          - 0.95
+          _Callbacks: []
+          _Names:
+          - {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb, type: 2}
+        _Clip: {fileID: 7400158, guid: dd4bc59541169e34ead96f0310ddc7bd, type: 3}
+        _NormalizedStartTime: NaN
+      <forwardJumpLand>k__BackingField:
+      - _FadeDuration: 0.1
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.2
+          - 0.9
+          _Callbacks: []
+          _Names:
+          - {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb, type: 2}
+        _Clip: {fileID: 7400132, guid: dd4bc59541169e34ead96f0310ddc7bd, type: 3}
+        _NormalizedStartTime: NaN
+      - _FadeDuration: 0.1
+        _Speed: 1
+        _Events:
+          _NormalizedTimes:
+          - 0.7803109
+          - 0.9
+          _Callbacks: []
+          _Names:
+          - {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb, type: 2}
+        _Clip: {fileID: 7400156, guid: dd4bc59541169e34ead96f0310ddc7bd, type: 3}
+        _NormalizedStartTime: NaN
+      platformerUpStart:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400146, guid: dd4bc59541169e34ead96f0310ddc7bd, type: 3}
+        _NormalizedStartTime: NaN
+      platformerUpLoop:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400148, guid: dd4bc59541169e34ead96f0310ddc7bd, type: 3}
+        _NormalizedStartTime: NaN
+      platFormerDownLoop:
+        _FadeDuration: 0.25
+        _Speed: 1
+        _Events:
+          _NormalizedTimes: []
+          _Callbacks: []
+          _Names: []
+        _Clip: {fileID: 7400150, guid: dd4bc59541169e34ead96f0310ddc7bd, type: 3}
+        _NormalizedStartTime: NaN
+  <playerParameterData>k__BackingField:
+    <standValueParameter>k__BackingField: {fileID: 11400000, guid: 37d1b1f02016c7944bc41b1db63b957f,
+      type: 2}
+    <rotationValueParameter>k__BackingField: {fileID: 11400000, guid: 7c49f815b53fd554caacddcfab8f999b,
+      type: 2}
+    <speedValueParameter>k__BackingField: {fileID: 11400000, guid: db36eba2f1fd0cf4f910a3c26494c5c1,
+      type: 2}
+    <LockValueParameter>k__BackingField: {fileID: 11400000, guid: 123734cdf95bfbe40b9b4adf3aa0cd93,
+      type: 2}
+    <Lock_X_ValueParameter>k__BackingField: {fileID: 11400000, guid: 12c53b7cc39f2324ea10b2d689999a0e,
+      type: 2}
+    <Lock_Y_ValueParameter>k__BackingField: {fileID: 11400000, guid: 155c8c7c1da9fca4b9aa0ba689448d5d,
+      type: 2}
+    <moveInterruptEvent>k__BackingField: {fileID: 11400000, guid: 546bdb412bbcf824496de50d0635d3fb,
+      type: 2}
+    <cancelClimbEvent>k__BackingField: {fileID: 11400000, guid: 380fccd68d7a4e14491c22fdb8c2fc60,
+      type: 2}
+  references:
+    version: 2
+    RefIds: []

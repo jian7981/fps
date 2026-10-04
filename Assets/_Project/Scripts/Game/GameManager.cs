@@ -1,40 +1,109 @@
 ﻿using UnityEngine;
+using Shared;   // MatchConfig / MatchConfigTransfer / Constants / PlayerSlot
 
+// ============ 对局管理器（map1 场景）============
+// 职责：进场取大厅配置 → 生成玩家 → 按配置生成 Bot
 public class GameManager : MonoBehaviour
 {
     [Header("玩家预制体")]
     public GameObject playerPrefab;
 
+    [Header("Bot 预制体")]
+    public GameObject botPrefab;        // 【新增】把 Bot.prefab 拖这里
+
     [Header("出生点设置 5V5")]
     public Transform[] teamASpawnPoints; // 队伍A的出生点
     public Transform[] teamBSpawnPoints; // 队伍B的出生点
 
+    private GameObject currentPlayer;    // 记住生成的玩家
+    private MatchConfig matchConfig;     // 本局配置（大厅组队界面带进来的）
+
     private void Start()
     {
-        //Gamemanager 只在map1存在，直接生成玩家
+        // 1. 从"中转站"取大厅带过来的组队配置
+        matchConfig = MatchConfigTransfer.Pending;
+        if (matchConfig == null)
+        {
+            // 直接在编辑器里单独运行 map1 时会走到这里：给一份默认配置
+            matchConfig = MatchConfig.CreateDefault(Constants.GameSceneName1);
+            Debug.LogWarning("[对局] 没有收到大厅配置，改用默认配置（你 + 9 个 AI）");
+        }
+
+        // 2. 打印本局配置（人类/AI/空位 三项相加 = 5）
+        Debug.Log("[对局配置] 地图：" + matchConfig.mapName
+            + "｜A队：人类 " + matchConfig.CountHuman(0) + " + AI " + matchConfig.CountAI(0) + " + 空位 " + matchConfig.CountEmpty(0)
+            + "｜B队：人类 " + matchConfig.CountHuman(1) + " + AI " + matchConfig.CountAI(1) + " + 空位 " + matchConfig.CountEmpty(1));
+
+        // 3. 生成你自己（A队第 1 格）
         SpawnPlayerSingle();
+
+        // 4. 按配置里的 AI 格子生成 Bot
+        SpawnBotsFromConfig();
     }
 
     void SpawnPlayerSingle()
     {
-        if(playerPrefab == null)
+        if (playerPrefab == null)
         {
             Debug.LogError("玩家预制体未设置！");
             return;
         }
-        if(teamASpawnPoints==null || teamASpawnPoints.Length == 0)
+        if (teamASpawnPoints == null || teamASpawnPoints.Length == 0)
         {
             Debug.LogError("队伍A出生点未设置！");
             return;
         }
-        Transform spawnPos = teamASpawnPoints[0];
-        Instantiate(playerPrefab, spawnPos.position, spawnPos.rotation);
-        Debug.Log("玩家已生成在队伍A出生点：" + spawnPos.name);
+        Transform spawnPos = GetRandomSpawnPoint(0); // 用随机出生点
+        currentPlayer = Instantiate(playerPrefab, spawnPos.position, spawnPos.rotation);
+        SetupRespawn(currentPlayer);
     }
+
+    // 【步骤1.4】按对局配置里的 AI 格子生成 Bot
+    void SpawnBotsFromConfig()
+    {
+        if (botPrefab == null)
+        {
+            Debug.LogError("Bot 预制体未设置！请在 GameManager 上拖入 Bot.prefab");
+            return;
+        }
+
+        int botCount = 0;
+        for (int i = 0; i < matchConfig.slots.Count; i++)
+        {
+            PlayerSlot slot = matchConfig.slots[i];
+            if (!slot.isAI) continue;   // 只给"是AI"的格子生成；空位/你的位置跳过
+
+            // 在该队伍的随机出生点附近落位（±2 米随机偏移，避免几个 Bot 叠在一起）
+            Transform spawnPoint = GetRandomSpawnPoint(slot.teamId);
+            Vector3 pos = spawnPoint.position + new Vector3(Random.Range(-2f, 2f), 0f, Random.Range(-2f, 2f));
+            GameObject bot = Instantiate(botPrefab, pos, spawnPoint.rotation);
+
+            // 把配置里的队伍编号写进 Bot 的 Health（决定敌我 + 队服颜色）
+            Health botHealth = bot.GetComponentInChildren<Health>();
+            if (botHealth != null) botHealth.SetTeamId(slot.teamId);
+
+            SetupRespawn(bot);   // 复用玩家那套复活逻辑：按队伍随机出生点
+            botCount++;
+        }
+
+        Debug.Log("[对局] 按配置生成了 " + botCount + " 个 Bot");
+    }
+
+    // 给任何有 Health 的角色接上"按队伍随机出生点"的复活逻辑（玩家和 Bot 共用）
+    void SetupRespawn(GameObject roleObj)
+    {
+        Health health = roleObj.GetComponentInChildren<Health>();
+        if (health == null) return;
+        // 第一次死亡要去的出生点
+        health.SetRespawnPoint(GetRandomSpawnPoint(health.TeamId));
+        // 每次复活后，先为"下一次死亡"抽一个新的随机出生点
+        health.OnRespawned += () => health.SetRespawnPoint(GetRandomSpawnPoint(health.TeamId));
+    }
+
     public Transform GetRandomSpawnPoint(int teamId)
     {
         Transform[] targetSpawns = (teamId == 0) ? teamASpawnPoints : teamBSpawnPoints;
-        if(targetSpawns==null||targetSpawns.Length == 0)
+        if (targetSpawns == null || targetSpawns.Length == 0)
         {
             Debug.LogWarning("队伍" + teamId + "没有出生点，回退到队伍A");
             targetSpawns = teamASpawnPoints;

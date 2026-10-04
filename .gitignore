@@ -40,5 +40,10 @@ Desktop.ini
 sysinfo.txt
 crashlytics-build.properties
 
+# ========== 本项目特有：超大第三方插件（整个目录 448MB，超过 GitHub 单文件 100MB 上限）==========
+# MMD4Mecanim 只是 MMD 模型的转换工具，模型材质早已转成 URP，游戏运行不依赖它
+# 本地磁盘上的文件保留不动，只是不再提交进仓库（以后若确实需要它，改用 Git LFS）
+/Assets/MMD4Mecanim/
+
 # ParrelSync克隆
 *_Clone/
