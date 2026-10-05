@@ -32,9 +32,13 @@ public class HUDManager : MonoBehaviour
     [SerializeField] private TMP_Text scoreboardText;
     [SerializeField] private KeyCode scoreboardKey = KeyCode.Tab;
 
-    // ---- 本地战绩（步骤1.5 会换成 MatchRules 的统一记分）----
+    // ---- 本地战绩（Tab 记分板 + 【步骤1.5】结算面板共用的数据源）----
     private int myKills;
     private int myDeaths;
+
+    // 【步骤1.5】只读出口：结算面板要显示"我的击杀/死亡"
+    public int MyKills => myKills;
+    public int MyDeaths => myDeaths;
 
     private Health health;              // 数据源1：血量
     private WeaponController weapons;   // 数据源2：武器

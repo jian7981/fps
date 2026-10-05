@@ -2,14 +2,14 @@
 using Shared;   // MatchConfig / MatchConfigTransfer / Constants / PlayerSlot
 
 // ============ 对局管理器（map1 场景）============
-// 职责：进场取大厅配置 → 生成玩家 → 按配置生成 Bot
+// 职责：进场取大厅配置 → 生成玩家和 Bot → 登记计分 → 对局结束冻结全场
 public class GameManager : MonoBehaviour
 {
     [Header("玩家预制体")]
     public GameObject playerPrefab;
 
     [Header("Bot 预制体")]
-    public GameObject botPrefab;        // 【新增】把 Bot.prefab 拖这里
+    public GameObject botPrefab;
 
     [Header("出生点设置 5V5")]
     public Transform[] teamASpawnPoints; // 队伍A的出生点
@@ -17,6 +17,19 @@ public class GameManager : MonoBehaviour
 
     private GameObject currentPlayer;    // 记住生成的玩家
     private MatchConfig matchConfig;     // 本局配置（大厅组队界面带进来的）
+
+    // 【步骤1.5】对局流程的两个组件（挂在同一个物体上，Awake 里自动拿）
+    private MatchState matchState;       // 比分 / 是否结束
+    private MatchRules matchRules;       // 规则：先到 N 杀获胜
+
+    private void Awake()
+    {
+        // 同一物体上直接拿组件，不需要在 Inspector 里拖
+        matchState = GetComponent<MatchState>();
+        matchRules = GetComponent<MatchRules>();
+        if (matchState == null) Debug.LogError("GameManager：同物体上缺少 MatchState 组件！（比分不工作）");
+        if (matchRules == null) Debug.LogError("GameManager：同物体上缺少 MatchRules 组件！（计分不工作）");
+    }
 
     private void Start()
     {
@@ -39,6 +52,9 @@ public class GameManager : MonoBehaviour
 
         // 4. 按配置里的 AI 格子生成 Bot
         SpawnBotsFromConfig();
+
+        // 5. 【步骤1.5】订阅"对局结束"：冻结全场（结算面板由 MatchResultUI 负责弹）
+        if (matchState != null) matchState.OnMatchOver += HandleMatchOver;
     }
 
     void SpawnPlayerSingle()
@@ -56,9 +72,13 @@ public class GameManager : MonoBehaviour
         Transform spawnPos = GetRandomSpawnPoint(0); // 用随机出生点
         currentPlayer = Instantiate(playerPrefab, spawnPos.position, spawnPos.rotation);
         SetupRespawn(currentPlayer);
+
+        // 【步骤1.5】把玩家登记给规则：死亡计分 + 战绩表里名字显示"你"
+        Health playerHealth = currentPlayer.GetComponentInChildren<Health>();
+        if (playerHealth != null && matchRules != null) matchRules.RegisterCombatant(playerHealth, "你");
     }
 
-    // 【步骤1.4】按对局配置里的 AI 格子生成 Bot
+    // 按对局配置里的 AI 格子生成 Bot
     void SpawnBotsFromConfig()
     {
         if (botPrefab == null)
@@ -78,9 +98,17 @@ public class GameManager : MonoBehaviour
             Vector3 pos = spawnPoint.position + new Vector3(Random.Range(-2f, 2f), 0f, Random.Range(-2f, 2f));
             GameObject bot = Instantiate(botPrefab, pos, spawnPoint.rotation);
 
-            // 把配置里的队伍编号写进 Bot 的 Health（决定敌我 + 队服颜色）
             Health botHealth = bot.GetComponentInChildren<Health>();
-            if (botHealth != null) botHealth.SetTeamId(slot.teamId);
+            if (botHealth != null)
+            {
+                botHealth.SetTeamId(slot.teamId);   // 决定敌我 + 队服颜色
+
+                // 【步骤1.5】战绩表里的 Bot 名字：沿用组队界面的编号（A2~A5 / B1~B5）
+                string teamLetter = (slot.teamId == 0) ? "A" : "B";
+                string botName = teamLetter + ((i % Constants.TeamSize) + 1);
+
+                if (matchRules != null) matchRules.RegisterCombatant(botHealth, botName);
+            }
 
             SetupRespawn(bot);   // 复用玩家那套复活逻辑：按队伍随机出生点
             botCount++;
@@ -98,6 +126,13 @@ public class GameManager : MonoBehaviour
         health.SetRespawnPoint(GetRandomSpawnPoint(health.TeamId));
         // 每次复活后，先为"下一次死亡"抽一个新的随机出生点
         health.OnRespawned += () => health.SetRespawnPoint(GetRandomSpawnPoint(health.TeamId));
+    }
+
+    // 对局结束（MatchRules → MatchState 广播过来）
+    private void HandleMatchOver(int winnerTeamId)
+    {
+        Debug.Log("[对局] 结束！" + ((winnerTeamId == 0) ? "A队" : "B队") + " 获胜，冻结全场");
+        Time.timeScale = 0f;   // 冻结全场：移动/动画/子弹全部停住（恢复在结算面板的返回按钮里）
     }
 
     public Transform GetRandomSpawnPoint(int teamId)

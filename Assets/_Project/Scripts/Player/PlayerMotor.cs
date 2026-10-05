@@ -62,9 +62,18 @@ public class PlayerMotor : MonoBehaviour
         MovePlayer();
         ApplyGravity();
 
-        // 【新增】用"本帧实际位移 ÷ 帧时长"算水平速度（比 CharacterController.velocity 可靠）
+        // 用"本帧实际位移 ÷ 帧时长"算水平速度（比 CharacterController.velocity 可靠）
         Vector3 delta = transform.position - posBefore;
-        float planarSpeed = new Vector3(delta.x, 0f, delta.z).magnitude / Time.deltaTime;
+        Vector3 planarDelta = new Vector3(delta.x, 0f, delta.z);       // 只取水平位移
+        float planarSpeed = planarDelta.magnitude / Time.deltaTime;    // 速度的"大小"（不分方向）
+
+        // 【新增】后退判定：位移方向和自己面朝的方向相反 → 速度取负
+        // 负值会去混合树左边的档位：-5 = 后退走，-9 = 后退跑
+        if (Vector3.Dot(planarDelta, transform.forward) < 0f)
+        {
+            planarSpeed = -planarSpeed;
+        }
+
         SetAnimatorSpeed(planarSpeed);
     }
 

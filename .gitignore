@@ -44,6 +44,7 @@ crashlytics-build.properties
 # MMD4Mecanim 只是 MMD 模型的转换工具，模型材质早已转成 URP，游戏运行不依赖它
 # 本地磁盘上的文件保留不动，只是不再提交进仓库（以后若确实需要它，改用 Git LFS）
 /Assets/MMD4Mecanim/
+/Assets/MMD4Mecanim.meta
 
 # ParrelSync克隆
 *_Clone/
