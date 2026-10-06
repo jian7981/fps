@@ -13,10 +13,25 @@ MonoBehaviour:
   m_Name: Rifle
   m_EditorClassIdentifier: 
   weaponName: "\u6B65\u67AA"
+  weaponType: 0
   damage: 25
   range: 100
-  fireRate: 8
-  magSize: 30
+  fireRate: 12
+  magSize: 50
   reserveAmmo: 90
   reloadTime: 2
   autoReloadWhenEmpty: 1
+  canAim: 1
+  aimFOV: 45
+  aimSpeed: 12
+  aimSensitivityScale: 0.6
+  hipSpread: 1.5
+  spreadPerShot: 0.5
+  maxSpread: 5
+  spreadRecover: 5
+  aimSpread: 0.01
+  recoilPitch: 0.35
+  recoilYawRandom: 0.15
+  recoilRecover: 0
+  aimRecoilPitch: 0.5
+  aimRecoilYawRandom: 0.08

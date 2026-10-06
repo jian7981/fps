@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: Sniper
   m_EditorClassIdentifier: 
   weaponName: "\u72D9\u51FB\u67AA"
+  weaponType: 1
   damage: 90
   range: 200
   fireRate: 1
@@ -20,3 +21,17 @@ MonoBehaviour:
   reserveAmmo: 25
   reloadTime: 2
   autoReloadWhenEmpty: 1
+  canAim: 1
+  aimFOV: 12
+  aimSpeed: 40
+  aimSensitivityScale: 0.35
+  hipSpread: 3.5
+  spreadPerShot: 2.5
+  maxSpread: 8
+  spreadRecover: 0
+  aimSpread: 0
+  recoilPitch: 1.2
+  recoilYawRandom: 0.3
+  recoilRecover: 8
+  aimRecoilPitch: 0.6
+  aimRecoilYawRandom: 0.15

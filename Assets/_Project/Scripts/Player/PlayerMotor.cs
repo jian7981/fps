@@ -9,16 +9,24 @@ public class PlayerMotor : MonoBehaviour
     public float gravity = -18f;
     public float jumpHeight = 1.2f;
 
+
+
     [Header("动画（没有 Animator 也不会报错）")]
     [SerializeField] private Animator animator;               // 【新增】留空 = Awake 自动找同物体上的 Animator
     [SerializeField] private string speedParameter = "Speed"; // 【新增】参数名，要和 Animator Controller 里一致
     [SerializeField] private float animDamp = 10f;            // 【新增】速度平滑，避免动作抽搐
+    // 【新增，1.7b】跳跃动画参数名（要和 Animator Controller 里的参数名对得上）
+    [SerializeField] private string groundedParameter = "isGrounded";   // 是否在地面
+    [SerializeField] private string jumpingParameter = "jumping";       // 是否处于"跳跃中"
 
     private CharacterController controller;
     private Vector3 velocity;
     private bool isGrounded;
     private bool isSprint = false; // 冲刺开关
     private Vector3 airMoveVelocity; // 保存空中滑行的速度
+    private bool wasGroundedLastFrame;   // 【新增，1.7b】上一帧是否在地面（用来检测"落地那一瞬间"）
+
+
 
     private Health health; // 自己的血量组件，用来判断死亡
 
@@ -75,6 +83,8 @@ public class PlayerMotor : MonoBehaviour
         }
 
         SetAnimatorSpeed(planarSpeed);
+        // 【新增，1.7b】把地面/跳跃状态写给 Animator（驱动 起跳 → 滞空 → 落地 三段动画）
+        UpdateJumpAnimator();
     }
 
     // 【新增】读 CharacterController 的真实水平速度，驱动 Idle / 走 / 跑 混合树
@@ -93,6 +103,34 @@ public class PlayerMotor : MonoBehaviour
         if (animator == null) return;
         float current = animator.GetFloat(speedParameter);
         animator.SetFloat(speedParameter, Mathf.Lerp(current, targetSpeed, animDamp * Time.deltaTime));
+        // 【新增，1.7b】复活时复位跳跃状态，防止"跳跃中"卡死在动画里
+        if (animator != null) animator.SetBool(jumpingParameter, false);
+        wasGroundedLastFrame = false;
+    }
+
+
+    // 【新增，1.7b】驱动跳跃动画：把"是否在地面 / 是否跳跃中"写进 Animator
+    // Animator 里的转移逻辑（在 playerA.controller 里配）：
+    //   移动 →(jumping=true) 起跳Jump →(播一半) 滞空Fall →(isGrounded=true) 回移动
+    //   没跳跃直接走出平台：isGrounded=false 且 jumping=false → 也会进滞空（AnyState 转移）
+    void UpdateJumpAnimator()
+    {
+        if (animator == null) return;
+
+        // 1. 每帧同步"是否在地面"（滞空 → 落地 的切换条件）
+        animator.SetBool(groundedParameter, isGrounded);
+
+        // 2. 落地那一瞬间（上一帧还在空中、这一帧踩到地面）→ 退出"跳跃中"
+        //    特意用"边缘检测"而不是直接判断 isGrounded：
+        //    因为起跳后 isGrounded 会延迟一两帧才变 false，
+        //    直接判断会把刚设置的"跳跃中"立刻误清掉
+        if (isGrounded && !wasGroundedLastFrame)
+        {
+            animator.SetBool(jumpingParameter, false);
+        }
+
+        // 3. 记下这一帧的地面状态，供下一帧对比
+        wasGroundedLastFrame = isGrounded;
     }
 
     // ↓↓↓ 以下四个方法一字未改 ↓↓↓
@@ -143,10 +181,11 @@ public class PlayerMotor : MonoBehaviour
     // 重力 + 跳跃
     void ApplyGravity()
     {
-        // 空格跳跃
         if (Input.GetKey(KeyCode.Space) && isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            // 【新增，1.7b】标记"进入跳跃中"，Animator 会切到起跳动画
+            if (animator != null) animator.SetBool(jumpingParameter, true);
         }
         velocity.y += gravity * Time.deltaTime;
         controller.Move(velocity * Time.deltaTime);

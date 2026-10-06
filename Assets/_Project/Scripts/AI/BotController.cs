@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 // ============ Bot 大脑：三状态状态机（步骤1.4）============
 // Patrol（巡逻）：在出生点附近随机游走；看得见敌人 → 切 Chase
@@ -277,13 +277,29 @@ public class BotController : MonoBehaviour
 
         if (drawDebugShots) Debug.DrawRay(eye, direction * fireRange, Color.yellow, 0.15f);   // Scene 视图看弹道
 
-        if (Physics.Raycast(eye, direction, out RaycastHit hit, fireRange, ~0, QueryTriggerInteraction.Ignore))
+        // 【改，1.8a】RaycastAll + 过滤：跳过自己身上的部位碰撞体（否则会被自己的手臂挡住），
+        // 并支持部位伤害倍率（头 2 / 四肢 0.75 / 躯干 1）
+        // Collide：部位碰撞体勾了 Is Trigger（不挡角色移动），射线默认忽略触发器，这里显式允许
+        RaycastHit[] hits = Physics.RaycastAll(eye, direction, fireRange, ~0, QueryTriggerInteraction.Collide);
+        if (hits.Length == 0) return;
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));   // 从近到远排序
+
+        for (int i = 0; i < hits.Length; i++)
         {
-            Health hitHealth = hit.collider.GetComponentInParent<Health>();
-            if (hitHealth != null && hitHealth != health)   // 排除自己
+            Health hitHealth = hits[i].collider.GetComponentInParent<Health>();
+            if (hitHealth == health) continue;   // 命中自己身上的部位 → 跳过，继续往后找
+            if (hits[i].collider.isTrigger && hits[i].collider.GetComponent<HitBox>() == null) continue;   // 无关触发器忽略
+
+            if (hitHealth != null && hitHealth != health)   // 打到的是别人
             {
-                hitHealth.TakeDamage(damage, gameObject);   // 统一入口；同队免伤在 Health 里兜底
+                // 【新增，1.8a】部位伤害：命中带 HitBox 标签的部位按倍率算
+                HitBox hitBox = hits[i].collider.GetComponent<HitBox>();
+                float multiplier = (hitBox != null) ? hitBox.DamageMultiplier : 1f;
+                int finalDamage = Mathf.Max(1, Mathf.RoundToInt(damage * multiplier));
+
+                hitHealth.TakeDamage(finalDamage, gameObject);   // 统一入口；同队免伤在 Health 里兜底
             }
+            break;   // 第一个有效命中就结束（子弹不穿透）
         }
     }
 
