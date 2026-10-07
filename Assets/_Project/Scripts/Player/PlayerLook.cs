@@ -1,7 +1,8 @@
 using UnityEngine;
+using Mirror;   // 【阶段2.1】NetworkBehaviour
 
 // 第一人称视角：鼠标转视角 + 开镜灵敏度缩放 + 【1.7d】镜头后坐力
-public class PlayerLook : MonoBehaviour
+public class PlayerLook : NetworkBehaviour
 {
     [Header("视角参数")]
     public Camera cam;
@@ -48,6 +49,14 @@ public class PlayerLook : MonoBehaviour
         if (cam != null) cam.transform.localRotation = Quaternion.identity;
     }
 
+    // 【阶段2.1】网络生成时分支：远程玩家（别人）身上的相机整个关掉
+    // HUD Canvas / 枪模 / AudioListener 都挂在相机下面，会一起被关掉 —— 各端只保留自己的第一人称视角
+    public override void OnStartClient()
+    {
+        if (NetUtil.IsLocalControl(this)) return;   // 自己的玩家：什么都不动
+        if (cam != null) cam.gameObject.SetActive(false);
+    }
+
     void Start()
     {
         // 锁鼠标（原样保留）
@@ -61,6 +70,7 @@ public class PlayerLook : MonoBehaviour
 
     void Update()
     {
+        if (!NetUtil.IsLocalControl(this)) return;     // 【阶段2.1】远程玩家不响应本机鼠标
         if (health != null && health.IsDead) return;   // 死亡时不能转视角
         if (cam == null) return;                       // 没拖相机时安全退出
 

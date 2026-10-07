@@ -62,7 +62,16 @@ namespace Mirror
         {
             // set lastTime to current time when creating connection to make
             // sure it isn't instantly kicked for inactivity
-            lastMessageTime = Time.time;
+            //
+            // 【本地补丁（阶段2.1）】Unity 禁止在 [Serializable] 类的构造函数里访问 Time.time
+            //（报错：get_time is not allowed to be called during serialization）。
+            // Mirror 在主机模式启动时会创建本对象，若落在编辑器某次(反)序列化窗口内，
+            // 该调用会抛异常并中断 Host 启动。这里捕获后回退为 0：
+            // lastMessageTime 在收到首条消息时会被刷新（NetworkServer/NetworkClient），
+            // 且 disconnectInactiveConnections 默认关闭 → 正常运行行为不变。
+            // 注意：升级 Mirror 时会覆盖此补丁。
+            try { lastMessageTime = Time.time; }
+            catch (UnityException) { lastMessageTime = 0f; }
         }
 
         // TODO if we only have Reliable/Unreliable, then we could initialize

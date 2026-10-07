@@ -4,6 +4,7 @@ using UnityEngine.UI;               // Button
 using UnityEngine.SceneManagement;  // LoadScene
 using TMPro;                        // TMP_Text
 using Shared;                       // Constants（每队行数 = Constants.TeamSize）
+using Mirror;                       // 【阶段2.3-B2】NetworkServer / NetworkClient / NetworkManager（返回大厅用）
 
 // ============ 结算面板（表现层）============
 // 订阅 MatchState.OnMatchOver：弹面板、填胜负/比分/双方战绩表、解锁鼠标
@@ -117,9 +118,16 @@ public class MatchResultUI : MonoBehaviour
     }
 
     // 【返回大厅】按钮点击
+    // 【阶段2.3-B2】联机适配（各端各自回大厅，靠 Mirror 的 offlineScene=Lobby 自动完成）：
+    //   主机：StopHost —— 停掉会话；客机们会收到断开，Mirror 自动把它们送回 Lobby
+    //   客机：StopClient —— 自己断开，同样自动回 Lobby
+    //   纯单机：和原版一样直接 LoadScene（场景重载 → 比分/战绩自动清零）
     private void ReturnToLobby()
     {
         Time.timeScale = 1f;   // 【关键】对局结束时冻结了时间（=0），回来前必须恢复
-        SceneManager.LoadScene(Constants.LobbySceneName);   // 场景重载 → 比分/战绩自动清零
+
+        if (NetworkServer.active) NetworkManager.singleton.StopHost();     // 主机
+        else if (NetworkClient.active) NetworkManager.singleton.StopClient();   // 客机
+        else SceneManager.LoadScene(Constants.LobbySceneName);
     }
 }

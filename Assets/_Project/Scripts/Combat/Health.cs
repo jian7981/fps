@@ -1,146 +1,216 @@
-﻿using System;                          // 引入 System 命名空间：为了用 Action（委托）和 IEnumerator 所在的类型体系
-using System.Collections;              // 引入集合命名空间：为了用 IEnumerator（协程的返回类型）
-using UnityEngine;                     // 引入 Unity 引擎命名空间：MonoBehaviour、GameObject、Mathf 都在这里
+﻿using System;                          // 为了用 Action（委托）
+using System.Collections;              // 为了用 IEnumerator（协程）
+using UnityEngine;                     // Unity 引擎命名空间
+using Mirror;                          // 【阶段2.2】NetworkBehaviour / SyncVar
 
 // 统一的受伤 / 死亡 / 复活入口
 // 铁律：任何扣血都必须走 TakeDamage，外部不许直接改血量
-// 联网后（阶段2）：伤害只在服务器执行，CurrentHp 改成 [SyncVar]，
-// 客户端照样通过 OnHealthChanged / OnDamaged 刷新 UI —— 事件接口不变，UI 零改动
-public class Health : MonoBehaviour   // 继承 MonoBehaviour：才能挂到游戏物体上、才能用协程和生命周期函数
+// 【阶段2.2】服务器权威 + 状态同步：
+//   1) 血量/护甲/死亡 改成 [SyncVar]，服务器一改，各端自动收到
+//   2) TakeDamage 只在服务器执行（纯单机没有网络会话时自动直通，行为不变）
+//   3) 原有 4 个事件照旧触发（hook 驱动）
+//      → HUD、死亡动画、死亡镜头、计分等订阅方一行都不用改
+public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → NetworkBehaviour
 {
-    [Header("生命值")]                  // Header：只是让 Inspector 面板上显示一段分组标题，纯美化
-    [SerializeField]                   // SerializeField：让 private 字段也能显示在 Inspector 里，但代码外部依然不能访问
-    private int maxHp = 100;           // 最大血量（私有字段 + 序列化 = 面板可调、代码受保护）
+    [Header("生命值")]
+    [SerializeField] private int maxHp = 100;
 
     [Header("护甲（先扣护甲，吸收一部分伤害）")]
-    [SerializeField] private int maxArmor = 50;              // 最大护甲值
-    [Range(0f, 1f)]                                          // Range：把这个 float 在 Inspector 里变成 0~1 的滑条，防止手填 3.5 这种非法值
-    [SerializeField] private float armorAbsorbRatio = 0.6f;  // 护甲吸收比例：0.6 表示 60% 的伤害打在护甲上
+    [SerializeField] private int maxArmor = 50;
+    [Range(0f, 1f)]
+    [SerializeField] private float armorAbsorbRatio = 0.6f;
 
     [Header("队伍（0=A队，1=B队）")]
-    [SerializeField] private int teamId = 0;                 // 所属队伍编号：以后 Bot、联机分队伍全靠它
-    [SerializeField] private bool allowFriendlyFire = false; // 是否允许友军伤害，默认关闭（同队免伤）
+    [SerializeField] private int teamId = 0;
+    [SerializeField] private bool allowFriendlyFire = false;
 
     [Header("死亡后自动复活")]
-    [SerializeField] private bool autoRespawn = true;        // 死亡后是否自动复活
-    [SerializeField] private float respawnDelay = 3f;        // 复活等待秒数
-    [Tooltip("留空=原地复活；填了=复活时传送过去（以后由 GameManager 按队伍出生点填充）")]
-    // Tooltip：鼠标悬停在 Inspector 这项上时显示这句提示文字
-    [SerializeField] private Transform respawnPoint;         // 复活点；没赋值就是 null，代码里会判空
+    [SerializeField] private bool autoRespawn = true;
+    [SerializeField] private float respawnDelay = 3f;
+    [Tooltip("留空=原地复活；填了=复活时传送过去（单机由 GameManager 填；联机的出生点复活在后续步骤做）")]
+    [SerializeField] private Transform respawnPoint;
+
+    // ---------- 同步状态：服务器改，各端自动收到 ----------
+    [SyncVar(hook = nameof(HookHealthChanged))] private int currentHp;
+    [SyncVar(hook = nameof(HookHealthChanged))] private int currentArmor;
+    [SyncVar(hook = nameof(HookIsDead))] private bool isDead;
 
     // ---------- 只读状态（外部只能读，不能改）----------
-    // => 是"表达式体属性"，等价于只写 get 的属性，读 MaxHp 就等于读 maxHp
     public int MaxHp => maxHp;
-    // { get; private set; } 是"自动属性"：外部能读，只有本类内部能写
-    public int CurrentHp { get; private set; }               // 当前血量（外部只读，改它必须走 TakeDamage）
-    public int MaxArmor => maxArmor;                         // 最大护甲（只读）
-    public int CurrentArmor { get; private set; }            // 当前护甲（外部只读）
-    public bool IsDead { get; private set; }                 // 是否已死亡（外部只读，给移动/射击脚本判断用）
-    public int TeamId => teamId;                             // 队伍编号的只读出口
+    public int CurrentHp => currentHp;
+    public int MaxArmor => maxArmor;
+    public int CurrentArmor => currentArmor;
+    public bool IsDead => isDead;
+    public int TeamId => teamId;
 
-    // ---------- 事件（逻辑层只管发事件，表现层订阅）----------
-    // event：事件关键字；Action<...>：System 命名空间下的泛型委托（= 一个没有返回值的函数签名）
-    // 外部用 += 订阅，用 -= 取消订阅；本类内部用 ?.Invoke() 触发
-    public event Action<int, GameObject> OnDamaged;   // 受伤时广播：(本次伤害总量, 攻击者)
-    public event Action OnHealthChanged;              // 血量或护甲变了：HUD 收到后自己来读最新数值
-    public event Action<GameObject> OnDied;           // 死亡时广播：(击杀者)
-    public event Action OnRespawned;                  // 复活完成时广播（无参数）
+    // ---------- 事件（接口没变，订阅方零改动）----------
+    public event Action<int, GameObject> OnDamaged;   // (伤害量, 攻击者) —— 联机下只在服务器触发（计分用）
+    public event Action OnHealthChanged;              // 血量/护甲变了：HUD 收到后自己来读最新数值
+    public event Action<GameObject> OnDied;           // 死亡广播：(击杀者)。客户端收到的 killer 为 null（动画/镜头/UI 都不用它）
+    public event Action OnRespawned;                  // 复活完成时广播
 
-    private Coroutine respawnCoroutine;               // 保存复活协程的句柄，用来防止重复启动协程
+    private Coroutine respawnCoroutine;
 
-    private void Awake()                              // Awake：物体创建时执行一次（比 Start 更早）
+    private void Awake()
     {
-        CurrentHp = maxHp;                           // 出场时血量满
-        CurrentArmor = maxArmor;                      // 出场时护甲满
-        IsDead = false;                              // 出场时是活着的
+        currentHp = maxHp;       // 出场满血
+        currentArmor = maxArmor; // 出场满甲
+        isDead = false;
+    }
+
+    // 【阶段2.3】联机：玩家由 NetworkManager 生成，GameManager 不再负责登记（它整体跳过了）
+    // → 服务器在"每个角色生成时"把他登记进 MatchRules（这是团队计分 / 战绩表的根基）
+    // 纯单机不会触发 OnStartServer，登记仍由 GameManager 负责，行为不变
+    public override void OnStartServer()
+    {
+        MatchRules rules = FindObjectOfType<MatchRules>();
+        if (rules == null) return;
+
+        // 玩家对象带连接：显示"玩家 1 / 玩家 2"；以后联机 Bot 没有连接，退回"玩家"（2.4 再细化名字）
+        string displayName = (connectionToClient != null)
+            ? "玩家 " + (connectionToClient.connectionId + 1)
+            : "玩家";
+        rules.RegisterCombatant(this, displayName);
+    }
+
+
+
+    // ---------- SyncVar 变化时触发原有事件（各端表现层零改动）----------
+    private void HookHealthChanged(int oldValue, int newValue) => OnHealthChanged?.Invoke();
+
+    private void HookIsDead(bool oldValue, bool newValue)
+    {
+        if (newValue)
+        {
+            // 死亡：服务器自己会用"真实击杀者"在 Die() 里触发一次；这里只负责客户端
+            if (NetUtil.IsServerSide()) return;
+            OnDied?.Invoke(null);   // 客户端：死亡动画 / 死亡镜头 / 死亡 UI
+        }
+        else
+        {
+            OnRespawned?.Invoke();  // 复活：各端都要（动画复位 / 镜头回位 / 枪恢复）
+        }
     }
 
     // ★ 唯一伤害入口：所有掉血都必须调用这个方法
-    public void TakeDamage(int damage, GameObject attacker)   // damage=伤害值，attacker=攻击者（可能是玩家/Bot/空）
+    // 【阶段2.2】联机中只有服务器能真正扣血；客户端调用直接忽略（结果通过 SyncVar 同步回来）
+    public void TakeDamage(int damage, GameObject attacker)
     {
-        if (IsDead || damage <= 0) return;       // 已经死了、或伤害不是正数 → 直接忽略，防止死后被鞭尸、负数回血
+        if (!NetUtil.IsServerSide()) return;   // 联机 + 不是服务器 → 拒绝（纯单机恒为 true，保持原行为）
+
+        if (isDead || damage <= 0) return;     // 已经死了、或伤害不是正数 → 忽略
 
         // 同队免伤（attacker 为空的伤害，比如跌落/环境伤害，不算队友）
-        // != gameObject 是排除"自己打自己"：自伤永远允许（测试脚本就用到这一点）
         if (!allowFriendlyFire && attacker != null && attacker != gameObject)
         {
-            // GetComponentInParent：从攻击者身上（或它的父物体）找 Health，
-            // 这样将来子弹、武器这类子物体当 attacker 也能正确找到所属角色
             Health attackerHealth = attacker.GetComponentInParent<Health>();
-            // 找到对方的 Health 且队伍编号跟我一样 → 是队友 → 不掉血，直接返回
             if (attackerHealth != null && attackerHealth.teamId == teamId) return;
         }
 
         // 护甲先吃一部分伤害，吃不完的落到血量上
-        int armorDamage = 0;                     // 记录这次护甲实际承受了多少伤害（用于日志/表现）
-        if (CurrentArmor > 0)                    // 有护甲才走护甲结算
+        int armorDamage = 0;
+        if (currentArmor > 0)
         {
-            // Mathf.Min(护甲值, 伤害×0.6 向上取整)：护甲不够就只扣完护甲，不会扣成负数
-            armorDamage = Mathf.Min(CurrentArmor, Mathf.CeilToInt(damage * armorAbsorbRatio));
-            CurrentArmor -= armorDamage;         // 扣除护甲
+            armorDamage = Mathf.Min(currentArmor, Mathf.CeilToInt(damage * armorAbsorbRatio));
+            currentArmor -= armorDamage;         // 走 SyncVar：各端自动收到 + 触发 OnHealthChanged
         }
-        int hpDamage = damage - armorDamage;     // 总伤害 - 护甲挡掉的 = 真正打到血量的部分
-        // Mathf.Max(0, …)：血量最低是 0，不会出现负数
-        CurrentHp = Mathf.Max(0, CurrentHp - hpDamage);
+        int hpDamage = damage - armorDamage;
+        currentHp = Mathf.Max(0, currentHp - hpDamage);   // 同上
 
-        // ?.Invoke：如果没人订阅（为 null）就不执行，避免空引用报错
-        OnDamaged?.Invoke(damage, attacker);     // 广播"受伤"给表现层（飘字、红屏、音效）
-        OnHealthChanged?.Invoke();               // 广播"数值变了"，HUD 会自己来读 CurrentHp / CurrentArmor
+        OnDamaged?.Invoke(damage, attacker);     // 服务器侧事件（计分用）
 
-        if (CurrentHp <= 0) Die(attacker);       // 血量归零 → 进入死亡流程（把攻击者当击杀者传下去）
+        // 【修复，2.2-A】Mirror 只在 host 模式赋值时才自动调 hook（单机/服务器不会）
+        // → 权威侧显式补一次（host 模式会重复一次，订阅方都是幂等操作，无影响）
+        OnHealthChanged?.Invoke();
+
+        if (currentHp <= 0) Die(attacker);       // 血量归零 → 死亡流程
     }
 
-    private void Die(GameObject killer)          // 死亡（私有：外部不能直接调用，只能通过打伤害触发）
+    private void Die(GameObject killer)
     {
-        if (IsDead) return;                      // 已经死了就不再重复触发（防重复广播）
-        IsDead = true;                           // 先置死亡标记，后续伤害会被 TakeDamage 拦掉
-        OnDied?.Invoke(killer);                  // 广播死亡：记分板、击杀提示都在这里接
+        if (isDead) return;
+        isDead = true;                           // 走 SyncVar：各端 HookIsDead(true)（客户端触发 OnDied）
+
+        // 服务器用真实击杀者再触发一次本地事件（击杀归属需要 killer）
+        if (NetUtil.IsServerSide()) OnDied?.Invoke(killer);
+
         Debug.Log("死亡");
-        // autoRespawn 为 true 且当前没有正在跑的复活协程 → 启动复活倒计时
+
+        // 复活倒计时只在服务器跑（客户端等 SyncVar 同步回来）
         if (autoRespawn && respawnCoroutine == null)
-            respawnCoroutine = StartCoroutine(RespawnAfterDelay());   // StartCoroutine 启动协程，并拿到句柄
+            respawnCoroutine = StartCoroutine(RespawnAfterDelay());
     }
 
-    private IEnumerator RespawnAfterDelay()      // 协程：返回 IEnumerator，可以"暂停若干秒"再继续
+    private IEnumerator RespawnAfterDelay()
     {
-        yield return new WaitForSeconds(respawnDelay);   // yield return：等 respawnDelay 秒（此处 3 秒）后继续往下执行
-        respawnCoroutine = null;                 // 倒计时结束，清空句柄，允许下次死亡重新启动协程
-        Revive();                                // 执行复活
+        yield return new WaitForSeconds(respawnDelay);   // 等 respawnDelay 秒（3 秒）
+        respawnCoroutine = null;
+        Revive();
     }
 
     // 复活：血量护甲回满；配了 respawnPoint 就传送过去
-    // 以后 GameManager 会这样用：health.transform.position = 出生点.position; health.Revive();
-    // 复活：血量护甲回满；配了 respawnPoint 就传送过去
+    // 【阶段2.2】联机时由服务器执行；各端通过 SyncVar 同步（OnRespawned 由 hook 触发）
+    // 复活：血量护甲回满
+    // 【阶段2.2-C】联机：位置是"客户端权威"，服务器选好出生点后发 RpcRespawn 让本人机器传送；
+    //    纯单机：沿用原来的（GameManager 配的 respawnPoint）传送逻辑
     public void Revive()
     {
-        // ---------- 传送回出生点 ----------
-        if (respawnPoint != null)
+        if (NetworkServer.active || NetworkClient.active)
         {
-            // 【关键】有 CharacterController 时，直接改 transform.position 可能被控制器覆盖，
-            // 标准做法：先禁用控制器 → 传送 → 再启用
-            CharacterController cc = GetComponent<CharacterController>();
-            if (cc != null) cc.enabled = false;
-
-            Vector3 before = transform.position;          // 【诊断】传送前的位置
-            transform.position = respawnPoint.position;
-            Vector3 after = transform.position;           // 【诊断】传送后的位置
-
-            if (cc != null) cc.enabled = true;
-
-            Debug.Log($"[复活] 出生点={respawnPoint.name}，传送前={before}，传送后={after}");
+            // 联机：从 NetworkStartPosition 里取一个出生点（map1 里挂了组件的那两个 Spawn_A0/A1）
+            Transform start = (NetworkManager.singleton != null) ? NetworkManager.singleton.GetStartPosition() : null;
+            Vector3 pos = (start != null) ? start.position : transform.position;
+            Quaternion rot = (start != null) ? start.rotation : transform.rotation;
+            RpcRespawn(pos, rot);   // 只发给这个角色"本人"那台机器执行
         }
         else
         {
-            // 【诊断】如果打出这条，说明 GameManager 没设置成功
-            Debug.LogWarning("[复活] respawnPoint 是空的（GameManager 没设置成功？）→ 只能原地复活");
+            // ---------- 纯单机：逻辑与原来完全一致 ----------
+            if (respawnPoint != null)
+            {
+                CharacterController cc = GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
+
+                Vector3 before = transform.position;
+                transform.position = respawnPoint.position;
+                Vector3 after = transform.position;
+
+                if (cc != null) cc.enabled = true;
+
+                Debug.Log($"[复活] 出生点={respawnPoint.name}，传送前={before}，传送后={after}");
+            }
+            else
+            {
+                Debug.LogWarning("[复活] respawnPoint 是空的（GameManager 没设置成功？）→ 只能原地复活");
+            }
         }
 
-        CurrentHp = maxHp;
-        CurrentArmor = maxArmor;
-        IsDead = false;
+        currentHp = maxHp;      // 走 SyncVar：客户端侧通过 hook 收到
+        currentArmor = maxArmor;
+        isDead = false;
 
+        // 【修复，2.2-A】Mirror 只在 host 模式赋值时才自动调 hook（单机不会）→ 权威侧显式补一次
+        // （host 模式会重复一次，订阅方都是幂等操作，无影响）
         OnHealthChanged?.Invoke();
         OnRespawned?.Invoke();
+    }
+
+
+    // 【阶段2.2-C】复活传送 RPC：服务器调用 → 在"这个角色本人的机器"上执行
+    // 为什么必须这样：位置是客户端权威（NetworkTransform ClientToServer），
+    // 服务器直接改坐标会被本人机器随后上报的位置覆盖 —— 只有本人机器传送才真正生效
+    [TargetRpc]
+    private void RpcRespawn(Vector3 position, Quaternion rotation)
+    {
+        CharacterController cc = GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;   // 标准做法：先禁用控制器 → 传送 → 再启用
+
+        transform.position = position;
+        transform.rotation = rotation;
+
+        if (cc != null) cc.enabled = true;
+
+        Debug.Log($"[复活-联机] 已传送回出生点 {position}");
     }
 
     // 【新增】由外部系统（GameManager）设置出生点：比如按队伍随机抽一个
@@ -150,10 +220,8 @@ public class Health : MonoBehaviour   // 继承 MonoBehaviour：才能挂到游�
     }
 
     // 【新增，步骤1.4】生成 Bot 时由 GameManager 调用：把队伍编号改成配置里的值
-    // 它会影响两件事：1) 同队免伤判定  2) 队服颜色（TeamColorApplier 在 Start 里读 TeamId）
     public void SetTeamId(int newTeamId)
     {
         teamId = newTeamId;
     }
-
 }

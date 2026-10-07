@@ -1,4 +1,4 @@
-using System.Collections;      // 协程
+﻿using System.Collections;      // 协程
 using UnityEngine;
 using UnityEngine.UI;          // Image
 
@@ -30,6 +30,8 @@ public class CrosshairUI : MonoBehaviour
     private WeaponController weapons;     // 数据源（往上找玩家身上的武器控制器）
     private Image[] lines;                // 4 条线的 Image（换颜色用）
     private Coroutine flashCoroutine;     // 闪红协程句柄
+    private Image[] aimImages;            // 【新增】开镜准星里的所有 Image（命中闪红用）
+    private Color[] aimOriginalColors;    // 【新增】开镜准星各自原本的颜色（闪完还原用）
 
     private void Awake()
     {
@@ -74,6 +76,13 @@ public class CrosshairUI : MonoBehaviour
         SetColor(normalColor);       // 初始白色
         ApplyGap(gapBase);           // 初始摆好位置
         if (aimCrosshair != null) aimCrosshair.SetActive(false);   // 开镜准星初始隐藏
+                                                                   // 【新增】缓存开镜准星里所有 Image 及其原始颜色（命中闪红、闪完还原用）
+        if (aimCrosshair != null)
+        {
+            aimImages = aimCrosshair.GetComponentsInChildren<Image>(true);
+            aimOriginalColors = new Color[aimImages.Length];
+            for (int i = 0; i < aimImages.Length; i++) aimOriginalColors[i] = aimImages[i].color;
+        }
     }
 
     // 【修复】把一条准星线的锚点和轴心强制设为"中心"（位置由脚本接管，锚点必须是中心）
@@ -133,5 +142,15 @@ public class CrosshairUI : MonoBehaviour
             }
         }
         if (centerDot != null) centerDot.color = c;   // 中心点一起变色
+
+        // 【新增】开镜准星一起闪红；恢复时用它自己原本的颜色（开镜准星在镜筒里可能不是白色）
+        if (aimImages != null)
+        {
+            for (int i = 0; i < aimImages.Length; i++)
+            {
+                if (aimImages[i] == null) continue;
+                aimImages[i].color = (c == hitColor) ? hitColor : aimOriginalColors[i];
+            }
+        }
     }
 }

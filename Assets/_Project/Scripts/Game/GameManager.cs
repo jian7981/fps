@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using Mirror;   // 【阶段2.1】NetworkServer / NetworkClient
 using Shared;   // MatchConfig / MatchConfigTransfer / Constants / PlayerSlot
 
 // ============ 对局管理器（map1 场景）============
@@ -33,6 +34,19 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
+        // 【阶段2.3】订阅"对局结束"：冻结全场（结算面板由 MatchResultUI 负责弹）
+        // 这行原来放在单机流程末尾，联机分支提前 return 后走不到 → 联机结算不会冻结，现挪到最前
+        if (matchState != null) matchState.OnMatchOver += HandleMatchOver;
+
+        // 【阶段2.1】联机会话中：玩家由 NetworkManager 统一生成（map1 作为 onlineScene 自动加载），
+        // 这里整体跳过本地生成，避免每台机器多冒出一个"本地单机玩家"
+        // （Bot 的网络化补位留到 2.4 处理）
+        if (NetworkServer.active || NetworkClient.active)
+        {
+            Debug.Log("[对局] 联机会话中：玩家由 NetworkManager 生成，GameManager 跳过本地生成");
+            return;
+        }
+
         // 1. 从"中转站"取大厅带过来的组队配置
         matchConfig = MatchConfigTransfer.Pending;
         if (matchConfig == null)
@@ -54,7 +68,7 @@ public class GameManager : MonoBehaviour
         SpawnBotsFromConfig();
 
         // 5. 【步骤1.5】订阅"对局结束"：冻结全场（结算面板由 MatchResultUI 负责弹）
-        if (matchState != null) matchState.OnMatchOver += HandleMatchOver;
+       // if (matchState != null) matchState.OnMatchOver += HandleMatchOver;
     }
 
     void SpawnPlayerSingle()

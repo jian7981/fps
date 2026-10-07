@@ -16,10 +16,10 @@ MonoBehaviour:
   weaponType: 0
   damage: 25
   range: 100
-  fireRate: 12
-  magSize: 50
-  reserveAmmo: 90
-  reloadTime: 2
+  fireRate: 9
+  magSize: 1000
+  reserveAmmo: 10000
+  reloadTime: 0.5
   autoReloadWhenEmpty: 1
   canAim: 1
   aimFOV: 45

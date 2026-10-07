@@ -286,6 +286,9 @@ public class BotController : MonoBehaviour
 
         for (int i = 0; i < hits.Length; i++)
         {
+            // 【新增，1.8c】跳过移动用的 CharacterController（它包裹全身，会挡住部位胶囊的命中）
+            if (hits[i].collider is CharacterController) continue;
+
             Health hitHealth = hits[i].collider.GetComponentInParent<Health>();
             if (hitHealth == health) continue;   // 命中自己身上的部位 → 跳过，继续往后找
             if (hits[i].collider.isTrigger && hits[i].collider.GetComponent<HitBox>() == null) continue;   // 无关触发器忽略

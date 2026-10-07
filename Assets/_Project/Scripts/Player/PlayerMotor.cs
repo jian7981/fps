@@ -1,7 +1,8 @@
 ﻿using UnityEngine;
+using Mirror;   // 【阶段2.1】NetworkBehaviour
 
 [RequireComponent(typeof(CharacterController))]
-public class PlayerMotor : MonoBehaviour
+public class PlayerMotor : NetworkBehaviour
 {
     [Header("移动参数")]
     public float moveSpeed = 5f;
@@ -25,6 +26,7 @@ public class PlayerMotor : MonoBehaviour
     private bool isSprint = false; // 冲刺开关
     private Vector3 airMoveVelocity; // 保存空中滑行的速度
     private bool wasGroundedLastFrame;   // 【新增，1.7b】上一帧是否在地面（用来检测"落地那一瞬间"）
+    private Vector3 prevPos;   // 【阶段2.1修复】上一帧末尾的位置（远端位置由 NetworkTransform 驱动，帧内取不到位移）
 
 
 
@@ -35,6 +37,7 @@ public class PlayerMotor : MonoBehaviour
         controller = GetComponent<CharacterController>();
         health = GetComponent<Health>(); // 取不到也不影响（下面都判空了）
         if (animator == null) animator = GetComponentInChildren<Animator>();   // 改成 InChildren，往下找
+        prevPos = transform.position;   // 初始化，避免第一帧出现巨大位移
     }
 
     void OnEnable()   // 订阅复活事件
@@ -63,12 +66,25 @@ public class PlayerMotor : MonoBehaviour
             return;
         }
 
-        Vector3 posBefore = transform.position;   // 【新增】记录移动前的位置
+        Vector3 posBefore = prevPos;   // 【阶段2.1修复】改为"上一帧末尾位置"：远端才能测到跨帧位移
 
-        CheckGround();
-        SprintToggle();
-        MovePlayer();
-        ApplyGravity();
+        // 【阶段2.1】联机时只有"自己的玩家对象"能响应键鼠、跑物理；
+        // 远程玩家（别人）的位置由 NetworkTransform 同步，这里不再驱动它移动
+        bool localControl = NetUtil.IsLocalControl(this);
+
+        if (localControl)
+        {
+            CheckGround();
+            SprintToggle();
+            MovePlayer();
+            ApplyGravity();
+        }
+        else if (animator != null)
+        {
+            // 【阶段2.1】远程玩家：不跑物理，给动画补一个"在地面"状态，
+            // 避免 Animator 卡在滞空动画里（跳跃动画的完整同步留到后续打磨）
+            animator.SetBool(groundedParameter, true);
+        }
 
         // 用"本帧实际位移 ÷ 帧时长"算水平速度（比 CharacterController.velocity 可靠）
         Vector3 delta = transform.position - posBefore;
@@ -84,7 +100,9 @@ public class PlayerMotor : MonoBehaviour
 
         SetAnimatorSpeed(planarSpeed);
         // 【新增，1.7b】把地面/跳跃状态写给 Animator（驱动 起跳 → 滞空 → 落地 三段动画）
-        UpdateJumpAnimator();
+        // 【阶段2.1】跳跃状态只对本地玩家评估：远程玩家只保留走/跑动画（由上面的位移驱动）
+        if (localControl) UpdateJumpAnimator();
+        prevPos = transform.position;   // 【阶段2.1修复】记下本帧末尾位置，供下一帧算位移
     }
 
     // 【新增】读 CharacterController 的真实水平速度，驱动 Idle / 走 / 跑 混合树

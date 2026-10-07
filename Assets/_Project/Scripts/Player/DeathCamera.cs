@@ -31,17 +31,20 @@ public class DeathCamera : MonoBehaviour
             Camera cam = GetComponentInChildren<Camera>();
             if (cam != null) cameraPivot = cam.transform;
         }
-    }
 
-    private void Start()
-    {
-        // 记录第一人称的机位（就是你现在相机上的位置/旋转）
+        // 【修复，2.2-A】机位记录改到 Awake：
+        // Mirror 在"主机初次生成"时会把所有 SyncVar 的 hook 强制触发一遍（含 OnRespawned），
+        // 这发生在 Start 之前——记录若留在 Start，相机会被提前的"复活事件"设成 (0,0,0)（卡在地里）。
         if (cameraPivot != null)
         {
             firstPersonLocalPos = cameraPivot.localPosition;
             firstPersonLocalEuler = cameraPivot.localEulerAngles;
         }
-    }
+    
+
+}
+
+    
 
     private void OnEnable()
     {

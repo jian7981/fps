@@ -19,7 +19,7 @@ MonoBehaviour:
   fireRate: 1
   magSize: 5
   reserveAmmo: 25
-  reloadTime: 2
+  reloadTime: 0.5
   autoReloadWhenEmpty: 1
   canAim: 1
   aimFOV: 12

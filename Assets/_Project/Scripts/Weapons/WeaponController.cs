@@ -1,13 +1,14 @@
-using System;                  // Action（事件）
+﻿using System;                  // Action（事件）
 using System.Collections;      // IEnumerator（协程）
 using UnityEngine;             // Unity 核心
+using Mirror;                  // 【阶段2.1】NetworkBehaviour
 using Random = UnityEngine.Random;   // 【修复】System 里也有 Random，加别名消除歧义（明确用 Unity 的）
 
 // 武器核心：射击（从 Shooter 并入）+ 弹药 + 换弹 + 切枪 + 【1.7d】开镜 + 腰射散布
 // 铁律2 输入与执行分离：Update 只负责"检测输入 → 调用方法"，方法本身不读输入
 // 铁律3 伤害走统一入口：命中后只调用 target.TakeDamage
 // 联网后（阶段2）：TryFire/Reload/SwitchWeapon 内部改成发 [Command]，FireRay 变成服务端判定
-public class WeaponController : MonoBehaviour
+public class WeaponController : NetworkBehaviour
 {
     [Header("武器列表（拖 WeaponData 资产进来，顺序 = 数字键顺序）")]
     [SerializeField] private WeaponData[] weapons;
@@ -66,6 +67,7 @@ public class WeaponController : MonoBehaviour
     private float lastFireTime = -10f;     // 【新增，1.7d】最近一次开火的时间（判断"是否正在连发"用）
     private bool aimLocked;                // 【新增，1.7d】射击后的开镜锁定（狙击"一枪一镜"）：松开右键前不能再开镜
     private float scopeOutTime = -1f;      // 【新增，1.7d】待收镜的时间点（-1 = 没有等待中的收镜）
+    private float serverNextFireTime;   // 【阶段2.2】服务器侧的射速校验（防连发宏）
 
     private void Awake()
     {
@@ -97,6 +99,9 @@ public class WeaponController : MonoBehaviour
 
     private void Update()
     {
+        // 【阶段2.1】联机时远程玩家（别人）不响应本机的键鼠输入
+        if (!NetUtil.IsLocalControl(this)) return;
+
         // 【输入与执行分离】这里只做"检测输入 → 调方法"
         if (Input.GetMouseButton(0)) TryFire();                        // 左键：按住连发
         if (Input.GetKeyDown(KeyCode.R)) Reload();                     // R：手动换弹
@@ -160,7 +165,15 @@ public class WeaponController : MonoBehaviour
         RaiseAmmoChanged();                                          // 通知 HUD + 调试打印
         OnFired?.Invoke();                                           // 广播"开火了"
 
-        FireRay(aimCamera.transform.position, fireDirection, weapon);   // 用刚才算好的方向打
+        // 【阶段2.2】联机：上报服务器裁决伤害；纯单机：本地直接执行（等价原行为）
+        Vector3 fireOrigin = aimCamera.transform.position;
+        if (NetworkServer.active || NetworkClient.active)
+            CmdFire(fireOrigin, fireDirection, currentIndex);      // 上报（方向里已含散布）
+        else
+            ServerFire(fireOrigin, fireDirection, currentIndex);   // 纯单机直通
+
+        // 本机自己的命中反馈（准星闪红/弹孔）仍用本地射线，即时无延迟（伤害由服务器算）
+        FireRayLocalEffects(fireOrigin, fireDirection, weapon);
 
         // 【新增，1.7d】狙击"一枪一镜"：开镜状态下开火 → 延迟 scopeOutDelay 秒后强制收镜
         // 延迟期间镜头保持在镜里（能看到枪响/火光/命中），到点自动收镜；
@@ -226,8 +239,8 @@ public class WeaponController : MonoBehaviour
         Vector3 origin = aimCamera.transform.position;
         if (!Physics.Raycast(origin, direction, out RaycastHit hit, wallCheckDistance, ~0, QueryTriggerInteraction.Ignore))
             return 0f;    // 这个方向上没东西（触发器被 Ignore，部位碰撞体不会误判）
-        if (selfHealth != null && hit.collider.GetComponentInParent<Health>() == selfHealth)
-            return 0f;    // 打到自己身上的部位（HitBox）→ 不算墙
+        if (hit.collider.GetComponentInParent<Health>() != null)
+            return 0f;    // 命中的是角色（自己或敌人，含其移动胶囊/部位）→ 不算墙
         return Mathf.Clamp01(1f - hit.distance / wallCheckDistance);   // 越近越接近 1
     }
 
@@ -249,53 +262,85 @@ public class WeaponController : MonoBehaviour
     // 命中判定核心（阶段2 变成服务端权威）：从相机沿给定方向发射线
     // 【改，1.8a】改用 RaycastAll + 过滤：角色加了"部位碰撞体"后，射线可能先打到自己身上的部位
     //   （手臂/胸口），直接 Raycast 会被自己挡住 → 表现成"子弹打不出去"
-    private void FireRay(Vector3 origin, Vector3 direction, WeaponData weapon)
-    {
-        // Collide：允许命中"触发器"——部位碰撞体勾了 Is Trigger（这样不会阻挡 CharacterController 移动），
-        // 而射线默认会忽略触发器，所以要显式允许
-        RaycastHit[] hits = Physics.RaycastAll(origin, direction, weapon.range, hitMask, QueryTriggerInteraction.Collide);
-        if (hits.Length == 0) return;   // 射程内什么都没打到
+    // ================= 【阶段2.2】射击拆分：服务器算伤害，本机算表现 =================
 
-        // RaycastAll 不保证顺序 → 按距离从近到远排序（先处理近的，跳过自己）
+    // 公共：从射线结果里挑出第一个"有效命中"（跳过自己身上的部位、没有 HitBox 的触发器等）
+    private bool PickValidHit(Vector3 origin, Vector3 direction, WeaponData weapon, out RaycastHit hit)
+    {
+        hit = default;
+        RaycastHit[] hits = Physics.RaycastAll(origin, direction, weapon.range, hitMask, QueryTriggerInteraction.Collide);
+        if (hits.Length == 0) return false;
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
-        RaycastHit hit = default;   // 最终选中的那个命中
-        bool found = false;
         for (int i = 0; i < hits.Length; i++)
         {
             Health h = hits[i].collider.GetComponentInParent<Health>();
-            if (h != null && h == selfHealth) continue;   // 命中自己身上的部位 → 跳过，继续往后找
-
-            // 跳过"没有 HitBox 标签的触发器"（场景里的触发区域不该挡子弹）
+            if (h != null && h == selfHealth) continue;   // 命中自己身上的部位 → 跳过
             if (hits[i].collider.isTrigger && hits[i].collider.GetComponent<HitBox>() == null) continue;
-
             hit = hits[i];
-            found = true;
-            break;
+            return true;
         }
-        if (!found) return;   // 全是自己/无关触发器 → 当作没命中
+        return false;
+    }
 
-        // 从命中的碰撞体往上找 Health（Health 挂在角色根物体上）
+    // ① 服务器侧：真正的伤害判定（射线 + 部位倍率 + TakeDamage + 击杀通知）
+    //    不用 [Server] 特性：纯单机也要能直通执行，所以手动判"是否服务器侧"
+    private void ServerFire(Vector3 origin, Vector3 direction, int weaponIndex)
+    {
+        if (!NetUtil.IsServerSide()) return;   // 联机中只有服务器执行（纯单机恒为 true）
+        if (weapons == null || weaponIndex < 0 || weaponIndex >= weapons.Length) return;
+        WeaponData weapon = weapons[weaponIndex];
+
+        // 射速校验（防连发宏）：服务器自己记冷却；0.02 秒容差避免正常连发被误拒
+        if (Time.time < serverNextFireTime - 0.02f) return;
+        serverNextFireTime = Time.time + 1f / weapon.fireRate;
+
+        if (!PickValidHit(origin, direction, weapon, out RaycastHit hit)) return;
+
         Health target = hit.collider.GetComponentInParent<Health>();
+        if (target == null || target.gameObject == gameObject) return;   // 打到墙/自己 → 没有伤害
 
+        bool wasAlive = !target.IsDead;                                  // 记录"打之前"是否活着
+        HitBox hitBox = hit.collider.GetComponent<HitBox>();
+        float multiplier = (hitBox != null) ? hitBox.DamageMultiplier : 1f;
+        int finalDamage = Mathf.Max(1, Mathf.RoundToInt(weapon.damage * multiplier));
+
+        target.TakeDamage(finalDamage, gameObject);   // ★ 统一伤害入口（服务器执行）
+
+        if (wasAlive && target.IsDead)                // 活着 → 死 = 这一枪是击杀
+            NotifyKilledToShooter(target);
+    }
+
+    // 击杀通知：联机走 TargetRpc（只发给这把枪的主人）；纯单机直接本地触发
+    private void NotifyKilledToShooter(Health victim)
+    {
+        if (NetworkServer.active || NetworkClient.active) RpcYouKilled(victim);
+        else OnKilled?.Invoke(victim);
+    }
+
+    [Command]
+    private void CmdFire(Vector3 origin, Vector3 direction, int weaponIndex)
+    {
+        ServerFire(origin, direction, weaponIndex);
+    }
+
+    // TargetRpc：在服务器调用、在"这个对象的主人（开枪者）"那台机器上执行
+    [TargetRpc]
+    private void RpcYouKilled(Health victim)
+    {
+        OnKilled?.Invoke(victim);   // 加击杀数 / 播"你 击杀了 X"
+    }
+
+    // ② 本机表现：命中反馈（准星闪红 / 弹孔火花）——只在开枪者本机跑，不走网络
+    private void FireRayLocalEffects(Vector3 origin, Vector3 direction, WeaponData weapon)
+    {
+        if (!PickValidHit(origin, direction, weapon, out RaycastHit hit)) return;
+
+        Health target = hit.collider.GetComponentInParent<Health>();
         if (target != null && target.gameObject != gameObject)
-        {
-            bool wasAlive = !target.IsDead;                 // 记录"打之前"是否活着
-
-            // 【新增，1.8a】部位伤害：命中带 HitBox 标签的部位就按倍率算（头 2 / 四肢 0.75 / 躯干 1）
-            HitBox hitBox = hit.collider.GetComponent<HitBox>();
-            float multiplier = (hitBox != null) ? hitBox.DamageMultiplier : 1f;
-            int finalDamage = Mathf.Max(1, Mathf.RoundToInt(weapon.damage * multiplier));   // 至少 1 点
-
-            target.TakeDamage(finalDamage, gameObject);   // ★ 统一伤害入口
-            OnHitTarget?.Invoke(hit, target);             // 命中反馈（准星闪红）照常
-
-            if (wasAlive && target.IsDead)                // 活着 → 死 = 这一枪是击杀
-                OnKilled?.Invoke(target);
-            return;
-        }
-
-        if (target == null) OnHitSurface?.Invoke(hit);            // 打到墙/地面
+            OnHitTarget?.Invoke(hit, target);    // 命中敌人反馈（准星闪红）
+        else if (target == null)
+            OnHitSurface?.Invoke(hit);           // 命中墙面反馈（弹孔/火花）
     }
 
     // 换弹
