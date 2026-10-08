@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.SceneManagement;
 using Shared;
+using Mirror;   // 【阶段2.4-C】StartHost / StartClient / NetworkManager
 
 // ============ 大厅逻辑管理器 ============
 // 挂载：Lobby 场景里的 LobbyManager 物体上
@@ -37,9 +38,20 @@ public class LobbyManager : MonoBehaviour
     }
 
     // 【预留接口，阶段2联机用】后面创建房间调用这个函数
+    // 【阶段2.4-C】创建房间：本机成为房主（NetworkRoomManager 会把所有人留在 Lobby 房间）
     public void CreateRoom()
     {
-        Debug.Log("创建房间，地图：" + selectedMapName);
+        Debug.Log("[大厅] 创建房间（StartHost）…");
+        NetworkManager.singleton.StartHost();
+    }
+
+    // 【阶段2.4-C】加入房间：连接到指定 IP（留空 = localhost）
+    public void JoinRoom(string ip)
+    {
+        if (string.IsNullOrWhiteSpace(ip)) ip = "localhost";
+        NetworkManager.singleton.networkAddress = ip;
+        Debug.Log("[大厅] 加入房间：" + ip + "（StartClient）…");
+        NetworkManager.singleton.StartClient();
     }
 
     // 记录选中的地图（地图选择界面调用）

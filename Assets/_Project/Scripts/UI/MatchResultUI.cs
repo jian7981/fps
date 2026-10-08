@@ -17,6 +17,8 @@ public class MatchResultUI : MonoBehaviour
     public TMP_Text titleText;       // 胜利！/ 失败…
     public TMP_Text scoreText;       // 最终比分
     public Button returnButton;      // 【返回大厅】
+    public Button returnRoomButton;          // 【阶段2.4-C】返回房间（联机时显示；每人自己点）
+    public TMP_Text returnRoomButtonLabel;   // 返回房间按钮上的文字（可选）
 
     [Header("战绩表（左右两栏）")]
     public Transform leftColumn;     // A队 行容器（挂 Vertical Layout Group）
@@ -33,6 +35,13 @@ public class MatchResultUI : MonoBehaviour
 
         resultPanel.SetActive(false);                      // 开局先藏起来
         returnButton.onClick.AddListener(ReturnToLobby);   // 绑定按钮（代码绑，OnClick 留空）
+
+        // 【阶段2.4-C】返回房间：只有联机时显示（单机没有"房间"概念）
+        if (returnRoomButton != null)
+        {
+            returnRoomButton.onClick.AddListener(ReturnToRoom);
+            returnRoomButton.gameObject.SetActive(NetworkServer.active || NetworkClient.active);
+        }
 
         CreateRows(leftColumn, leftRows);                  // 预生成左栏 5 行
         CreateRows(rightColumn, rightRows);                // 预生成右栏 5 行
@@ -122,12 +131,51 @@ public class MatchResultUI : MonoBehaviour
     //   主机：StopHost —— 停掉会话；客机们会收到断开，Mirror 自动把它们送回 Lobby
     //   客机：StopClient —— 自己断开，同样自动回 Lobby
     //   纯单机：和原版一样直接 LoadScene（场景重载 → 比分/战绩自动清零）
+    // 【返回大厅】按钮点击
+    // 【阶段2.4-B2】房间流程：回房间 = 服务器切场景（所有客户端自动跟随、连接不断、准备状态自动重置）
+    //   主机：ServerChangeScene(RoomScene) → 大家一起回 Lobby 房间，直接"再来一局"
+    //   客机：自己切不了场景，等房主操作（这里给个提示）
+    //   纯单机：和原版一样直接 LoadScene（场景重载 → 比分/战绩自动清零）
+    // 【返回大厅】按钮点击（联机 = 离场：主机解散房间、客机退出房间；单机 = 重新加载大厅）
+    private void Update()
+    {
+        // 【阶段2.4-C】自己选了"返回房间"之后：按钮变灰显示"等待其他玩家…"
+        if (returnRoomButton == null || !returnRoomButton.gameObject.activeSelf || !returnRoomButton.interactable) return;
+        PlayerMatchActions actions = (NetworkClient.localPlayer != null)
+            ? NetworkClient.localPlayer.GetComponent<PlayerMatchActions>() : null;
+        if (actions == null || !actions.wantsNextRound) return;
+
+        returnRoomButton.interactable = false;
+        if (returnRoomButtonLabel != null) returnRoomButtonLabel.text = "已选择，等待其他玩家…";
+    }
+
+    // 【返回大厅】按钮点击（联机 = 离场：主机解散房间、客机退出房间；单机 = 重新加载大厅）
     private void ReturnToLobby()
     {
         Time.timeScale = 1f;   // 【关键】对局结束时冻结了时间（=0），回来前必须恢复
 
-        if (NetworkServer.active) NetworkManager.singleton.StopHost();     // 主机
-        else if (NetworkClient.active) NetworkManager.singleton.StopClient();   // 客机
-        else SceneManager.LoadScene(Constants.LobbySceneName);
+        if (NetworkServer.active)          // 主机：解散房间
+        {
+            NetworkManager.singleton.StopHost();
+        }
+        else if (NetworkClient.active)     // 客机：退出房间（Mirror 自动回 offlineScene=Lobby）
+        {
+            Debug.Log("[房间] 已退出房间，返回大厅");
+            NetworkManager.singleton.StopClient();
+        }
+        else                               // 纯单机
+        {
+            SceneManager.LoadScene(Constants.LobbySceneName);
+        }
+    }
+
+    // 【阶段2.4-C】返回房间：每人自己点、自己表态；全员都点了服务器才把全队切回房间
+    private void ReturnToRoom()
+    {
+        Time.timeScale = 1f;
+        PlayerMatchActions actions = (NetworkClient.localPlayer != null)
+            ? NetworkClient.localPlayer.GetComponent<PlayerMatchActions>() : null;
+        if (actions != null) actions.CmdRequestReturnToRoom();
+        else Debug.LogWarning("[房间] 找不到本机玩家，无法请求返回房间");
     }
 }

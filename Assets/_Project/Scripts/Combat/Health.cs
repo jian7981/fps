@@ -21,7 +21,8 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
     [SerializeField] private float armorAbsorbRatio = 0.6f;
 
     [Header("队伍（0=A队，1=B队）")]
-    [SerializeField] private int teamId = 0;
+    // 【阶段2.4-B】改 SyncVar：进图时服务器按房间分配下发，客户端的上色（TeamColorApplier）才能对上
+    [SyncVar] private int teamId = 0;
     [SerializeField] private bool allowFriendlyFire = false;
 
     [Header("死亡后自动复活")]
@@ -157,8 +158,18 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
     {
         if (NetworkServer.active || NetworkClient.active)
         {
-            // 联机：从 NetworkStartPosition 里取一个出生点（map1 里挂了组件的那两个 Spawn_A0/A1）
-            Transform start = (NetworkManager.singleton != null) ? NetworkManager.singleton.GetStartPosition() : null;
+            // 【阶段2.4-B】联机：优先按"自己队伍"的出生点（GameManager 里配的 A/B 两片半场），
+            // 找不到再回退到原来的 NetworkStartPosition 随机逻辑
+            Transform start = null;
+            GameManager gm = FindObjectOfType<GameManager>();
+            if (gm != null)
+            {
+                Transform[] list = (teamId == 0) ? gm.teamASpawnPoints : gm.teamBSpawnPoints;
+                if (list != null && list.Length > 0) start = list[UnityEngine.Random.Range(0, list.Length)];
+            }
+            if (start == null && NetworkManager.singleton != null)
+                start = NetworkManager.singleton.GetStartPosition();
+
             Vector3 pos = (start != null) ? start.position : transform.position;
             Quaternion rot = (start != null) ? start.rotation : transform.rotation;
             RpcRespawn(pos, rot);   // 只发给这个角色"本人"那台机器执行

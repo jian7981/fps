@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using TMPro;
+using UnityEngine;
 using UnityEngine.UI;
 
 // ============ 大厅 UI 总控（四个界面的切换开关）============
@@ -20,17 +21,34 @@ public class LobbyUI : MonoBehaviour
     public Button teamButton;            // 【组队】按钮
     public Button settingsButton;        // 【新增】【设置】按钮
 
+    [Header("联机入口（【阶段2.4-C】）")]
+    public Button soloPracticeButton; // 单人练习（打开原组队界面 = 单机流程）
+    public Button joinRoomButton;        // 加入房间
+    public TMP_InputField ipInput;       // 房主 IP 输入框（留空 = localhost）
+
     private void Start()
     {
         if (!CheckRefs()) return;
 
         // 1. 绑定主界面按钮（都是代码绑，Inspector 里的 OnClick 留空）
         selectMapButton.onClick.AddListener(OpenMapPanel);        // 点"选择地图" → 打开地图选择界面
-        teamButton.onClick.AddListener(OpenTeamPanel);            // 点"组队" → 打开组队界面
+        teamButton.onClick.AddListener(lobbyManager.CreateRoom);  // 【改，2.4-C】点"组队" = 自动创建房间（StartHost）
+        if (soloPracticeButton != null) soloPracticeButton.onClick.AddListener(OpenTeamPanel);   // 单人练习 = 原组队界面
+        if (joinRoomButton != null) joinRoomButton.onClick.AddListener(OnJoinRoomClicked);       // 加入房间
         settingsButton.onClick.AddListener(OpenSettingsPanel);    // 【新增】点"设置" → 打开设置界面
 
+
+        // 【阶段2.4-C】联机入口
         // 2. 游戏一开始只显示主界面
         ShowMainPanel();
+    }
+
+
+    // 【阶段2.4-C】加入房间：把输入框里的 IP 交给 LobbyManager
+    private void OnJoinRoomClicked()
+    {
+        string ip = (ipInput != null) ? ipInput.text : "";
+        lobbyManager.JoinRoom(ip);
     }
 
     // 打开地图选择界面
@@ -68,6 +86,16 @@ public class LobbyUI : MonoBehaviour
         teamPanel.SetActive(false);
         settingsPanel.SetActive(false);   // 【新增】
     }
+
+    // 【阶段2.4-C】藏掉大厅的所有面板（进房间时用——房间面板显示期间不该看到主菜单）
+    public void HideAllPanels()
+    {
+        mainMenu.SetActive(false);
+        mapPanel.SetActive(false);
+        teamPanel.SetActive(false);
+        settingsPanel.SetActive(false);
+    }
+
 
     // 引用自检：缺哪个就明确报哪个，避免对着 NullReference 发呆
     private bool CheckRefs()

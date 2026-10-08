@@ -731,7 +731,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   scopeImage: {fileID: 3976914509934652877}
   textureSize: 512
-  holeRadiusRatio: 0.42
+  holeRadiusRatio: 0.55
   crosshairThickness: 2
 --- !u!1 &3293698620445221722
 GameObject:
@@ -3158,6 +3158,10 @@ PrefabInstance:
         type: 3}
       insertIndex: -1
       addedObject: {fileID: 2697576103567463138}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8851c84ea91108f469f2b8545ad61a74,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4344357666106450429}
   m_SourcePrefab: {fileID: 100100000, guid: 8851c84ea91108f469f2b8545ad61a74, type: 3}
 --- !u!4 &849525872655315937 stripped
 Transform:
@@ -3266,7 +3270,6 @@ MonoBehaviour:
   maxHp: 100
   maxArmor: 50
   armorAbsorbRatio: 0.6
-  teamId: 0
   allowFriendlyFire: 1
   autoRespawn: 1
   respawnDelay: 3
@@ -3415,6 +3418,23 @@ MonoBehaviour:
   syncDirection: 0
   syncMode: 0
   syncInterval: 0
+--- !u!114 &4344357666106450429
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2634357841306497203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dcf41611fcbccda428e737a3ba0925f6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncMethod: 0
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  wantsNextRound: 0
 --- !u!4 &3268097988365901197 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 366175167995203695, guid: 8851c84ea91108f469f2b8545ad61a74,

@@ -37,9 +37,9 @@ public class WeaponController : NetworkBehaviour
 
     // ---------- 对外只读状态（HUD 以后读这些）----------
     public WeaponData CurrentWeapon => (weapons != null && weapons.Length > 0) ? weapons[currentIndex] : null;
-    public int CurrentMag => (magAmmo != null && magAmmo.Length > 0) ? magAmmo[currentIndex] : 0;          // 当前弹匣余弹
-    public int CurrentReserve => (reserveAmmo != null && reserveAmmo.Length > 0) ? reserveAmmo[currentIndex] : 0; // 当前备弹
-    public bool IsReloading { get; private set; }       // 是否正在换弹（换弹中不能开火）
+    public int CurrentMag => currentMag;                // 【改，2.3-A】读同步值（服务器回写）
+    public int CurrentReserve => currentReserve;        // 【改，2.3-A】读同步值（服务器回写）
+    public bool IsReloading => isReloading;             // 【改，2.3-A】属性 → [SyncVar] 字段
     public bool CanFire => Time.time >= nextFireTime;   // 射速冷却好了没
     public bool IsAiming { get; private set; }        // 【新增，1.7d】是否正在开镜
     public float CurrentSpread => currentSpread;      // 【新增，1.7d】当前散布（度）——准星读它画大小
@@ -57,9 +57,14 @@ public class WeaponController : NetworkBehaviour
     public event Action<Health> OnKilled;   // 【新增】击杀事件：只有"这一枪把对方打死"时才触发
     public event Action<bool> OnAimChanged;   // 【新增，1.7d】开镜/收镜（true = 进入开镜）
 
-    private int currentIndex = 0;          // 当前武器下标
-    private int[] magAmmo;                 // 每把枪的弹匣余弹（和 weapons 一一对应，唯一数据源）
-    private int[] reserveAmmo;             // 每把枪的备弹
+    // ---------- 【阶段2.3-A】网络同步的"当前状态"（服务器权威：服务器改，各端自动收到）----------
+    [SyncVar(hook = nameof(HookWeaponIndexChanged))] private int currentIndex;   // 当前武器下标
+    [SyncVar(hook = nameof(HookAmmoChanged))] private int currentMag;            // 当前武器弹匣余弹（给 HUD）
+    [SyncVar(hook = nameof(HookAmmoChanged))] private int currentReserve;        // 当前武器备弹（给 HUD）
+    [SyncVar(hook = nameof(HookReloadingChanged))] private bool isReloading;     // 是否换弹中
+
+    private int[] magAmmo;                 // 每把枪的弹匣余弹（服务器侧真实数据；客户端只读同步值）
+    private int[] reserveAmmo;             // 每把枪的备弹（同上）
     private float nextFireTime;            // 下次允许开火的时间点
     private Coroutine reloadCoroutine;     // 换弹协程句柄（切枪时用它打断换弹）
     private Health selfHealth;             // 自己的 Health（死了不能开火）
@@ -67,6 +72,7 @@ public class WeaponController : NetworkBehaviour
     private float lastFireTime = -10f;     // 【新增，1.7d】最近一次开火的时间（判断"是否正在连发"用）
     private bool aimLocked;                // 【新增，1.7d】射击后的开镜锁定（狙击"一枪一镜"）：松开右键前不能再开镜
     private float scopeOutTime = -1f;      // 【新增，1.7d】待收镜的时间点（-1 = 没有等待中的收镜）
+    private bool matchOverAimLock;         // 【修复】对局已结束（结算弹出后禁止再开镜，镜筒会挡结算）
     private float serverNextFireTime;   // 【阶段2.2】服务器侧的射速校验（防连发宏）
 
     private void Awake()
@@ -88,8 +94,36 @@ public class WeaponController : NetworkBehaviour
             magAmmo[i] = weapons[i].magSize;
             reserveAmmo[i] = weapons[i].reserveAmmo;
         }
+        // 【阶段2.3-A】初始化同步值：真实数据先打底（客户端 spawn 时会收到服务器的值）
+        currentMag = magAmmo[currentIndex];
+        currentReserve = reserveAmmo[currentIndex];
         currentSpread = CurrentWeapon != null ? CurrentWeapon.hipSpread : 0f;   // 【新增，1.7d】初始散布=腰射基础值
     }
+
+
+    // ---------- 【阶段2.3-A】SyncVar 变化 → 触发原有事件（各端表现层零改动）----------
+    private void HookAmmoChanged(int oldValue, int newValue) => OnAmmoChanged?.Invoke();
+
+    private void HookWeaponIndexChanged(int oldValue, int newValue)
+    {
+        OnWeaponChanged?.Invoke(newValue, CurrentWeapon);   // HUD 换枪名/弹药
+        OnAmmoChanged?.Invoke();
+    }
+
+    private void HookReloadingChanged(bool oldValue, bool newValue)
+    {
+        if (newValue) OnReloadStart?.Invoke(CurrentWeapon != null ? CurrentWeapon.reloadTime : 0f);   // HUD"换弹中…"
+        else OnReloadEnd?.Invoke();
+    }
+
+    // 服务器把"当前这把枪的真实弹药"发布成 SyncVar（扣弹 / 装弹 / 切枪后都要调一次）
+    private void PublishCurrentAmmo()
+    {
+        currentMag = magAmmo[currentIndex];           // 走 SyncVar：各端自动收到
+        currentReserve = reserveAmmo[currentIndex];
+        RaiseAmmoChanged();                           // 权威侧显式补一次事件（幂等）
+    }
+
 
     private void Start()
     {
@@ -153,8 +187,8 @@ public class WeaponController : NetworkBehaviour
             return false;
         }
 
-        magAmmo[currentIndex]--;                                     // 消耗一发子弹
-        nextFireTime = Time.time + 1f / weapon.fireRate;             // 记录下次可开火时间
+        // 【阶段2.3-A 改动】不在本机扣弹：上报服务器，由服务器扣减 + SyncVar 回写（HUD 靠事件自动刷新）
+        nextFireTime = Time.time + 1f / weapon.fireRate;             // 本机射速节奏（手感，保持不动）
 
         // 【改，1.7d】顺序很重要：先算"本发的方向"（用开枪前的散布），再增加散布
         // 这样第一发永远最准：狙击开镜指哪打哪；散布增量只影响后续子弹（腰射连发才越打越散）
@@ -162,7 +196,6 @@ public class WeaponController : NetworkBehaviour
         currentSpread = Mathf.Min(weapon.maxSpread, currentSpread + weapon.spreadPerShot);   // 散布变大（只影响后续子弹）
         lastFireTime = Time.time;                                    // 记住开火时刻（连发期间暂停恢复）
 
-        RaiseAmmoChanged();                                          // 通知 HUD + 调试打印
         OnFired?.Invoke();                                           // 广播"开火了"
 
         // 【阶段2.2】联机：上报服务器裁决伤害；纯单机：本地直接执行（等价原行为）
@@ -245,10 +278,11 @@ public class WeaponController : NetworkBehaviour
     }
 
     // 【新增，1.7d】开镜状态切换（唯一入口：输入/切枪/死亡/狙击收镜都走它，状态永远不会乱）
+    // 【新增，1.7d】开镜状态切换（唯一入口：输入/切枪/死亡/狙击收镜都走它，状态永远不会乱）
     public void SetAiming(bool wantAim)
     {
-        // 死了、或这把枪不支持开镜 → 强制不开
-        bool canAimNow = wantAim && CurrentWeapon != null && CurrentWeapon.canAim
+        // 死了、这把枪不支持开镜、或对局已结束 → 强制不开
+        bool canAimNow = !matchOverAimLock && wantAim && CurrentWeapon != null && CurrentWeapon.canAim
                          && (selfHealth == null || !selfHealth.IsDead);
         if (canAimNow == IsAiming) return;      // 状态没变：什么都不做
 
@@ -257,6 +291,17 @@ public class WeaponController : NetworkBehaviour
             currentSpread = Mathf.Min(currentSpread, CurrentWeapon.aimSpread);   // 开镜瞬间直接收紧散布
 
         OnAimChanged?.Invoke(IsAiming);         // 广播：枪模/FOV/准星/灵敏度都在听
+    }
+
+    // 【修复】对局结束（结算面板弹出）时自动收镜：
+    // 最后一杀如果开着镜，狙击镜筒会一直开着挡住结算战绩；
+    // 这里强制收镜并上锁（否则玩家还按着右键，下一帧又会自动开回去）
+    public void CloseAimForMatchOver()
+    {
+        matchOverAimLock = true;    // 上锁：SetAiming 会拦掉后续所有开镜请求
+        aimLocked = false;          // 清掉狙击"一枪一镜"的锁定，避免状态残留
+        scopeOutTime = -1f;         // 清掉"待收镜"
+        SetAiming(false);           // 立即收镜（触发 OnAimChanged → 镜筒隐藏、准星/枪模恢复）
     }
 
     // 命中判定核心（阶段2 变成服务端权威）：从相机沿给定方向发射线
@@ -288,12 +333,21 @@ public class WeaponController : NetworkBehaviour
     private void ServerFire(Vector3 origin, Vector3 direction, int weaponIndex)
     {
         if (!NetUtil.IsServerSide()) return;   // 联机中只有服务器执行（纯单机恒为 true）
-        if (weapons == null || weaponIndex < 0 || weaponIndex >= weapons.Length) return;
+        if (weapons == null || currentIndex < 0 || currentIndex >= weapons.Length) return;
+
+        // 【阶段2.3-A】不信任上报的 weaponIndex（客户端可伪造）→ 一律用服务器记录的当前武器
+        weaponIndex = currentIndex;
         WeaponData weapon = weapons[weaponIndex];
 
         // 射速校验（防连发宏）：服务器自己记冷却；0.02 秒容差避免正常连发被误拒
         if (Time.time < serverNextFireTime - 0.02f) return;
         serverNextFireTime = Time.time + 1f / weapon.fireRate;
+
+        // 【阶段2.3-A】弹药 / 换弹校验（服务器权威）：打空枪、换弹中开枪的违规请求直接拒绝
+        if (isReloading) return;
+        if (magAmmo[weaponIndex] <= 0) return;
+        magAmmo[weaponIndex]--;                // 服务器扣弹
+        PublishCurrentAmmo();                  // 同步给各端（本机 HUD 也刷新）
 
         if (!PickValidHit(origin, direction, weapon, out RaycastHit hit)) return;
 
@@ -344,58 +398,91 @@ public class WeaponController : NetworkBehaviour
     }
 
     // 换弹
+    // 换弹：玩家输入 → 只发"请求"，由服务器校验并执行（【阶段2.3-A】）
     public void Reload()
     {
-        WeaponData weapon = CurrentWeapon;
-        if (weapon == null || IsReloading) return;      // 已经在换弹
-        if (CurrentMag >= weapon.magSize) return;       // 弹匣是满的
-        if (CurrentReserve <= 0) return;                // 备弹为 0
-
-        reloadCoroutine = StartCoroutine(ReloadRoutine(weapon));
+        if (NetworkServer.active || NetworkClient.active) CmdReload();   // 联机：上报
+        else ServerReload();                                             // 纯单机：直通
     }
 
-    private IEnumerator ReloadRoutine(WeaponData weapon)
+    [Command]
+    private void CmdReload() => ServerReload();
+
+    // 服务器侧换弹：先校验（不在换弹、弹匣不满、有备弹）再开始计时
+    private void ServerReload()
     {
-        IsReloading = true;                                  // 标记换弹中（TryFire 会拦住开火）
-        OnReloadStart?.Invoke(weapon.reloadTime);            // 广播换弹开始
+        if (!NetUtil.IsServerSide()) return;
+        WeaponData weapon = CurrentWeapon;
+        if (weapon == null || isReloading) return;              // 已经在换弹（客户端重复请求也会被这里挡住）
+        if (magAmmo[currentIndex] >= weapon.magSize) return;    // 弹匣是满的
+        if (reserveAmmo[currentIndex] <= 0) return;             // 备弹为 0
+
+        reloadCoroutine = StartCoroutine(ServerReloadRoutine(weapon));
+    }
+
+    // 换弹计时完全在服务器跑（客户端只等 SyncVar：isReloading 的 hook 驱动"换弹中…"和结束刷新）
+    private IEnumerator ServerReloadRoutine(WeaponData weapon)
+    {
+        isReloading = true;                                  // 走 SyncVar：各端 HookReloadingChanged → OnReloadStart
+        OnReloadStart?.Invoke(weapon.reloadTime);            // 权威侧显式补一次（单机/主机）
         if (debugLogAmmo) Debug.Log($"[武器] 开始换弹：{weapon.weaponName}，耗时 {weapon.reloadTime} 秒");
 
         yield return new WaitForSeconds(weapon.reloadTime);  // 等待换弹时间
 
-        int need = weapon.magSize - CurrentMag;              // 还差多少发装满
-        int load = Mathf.Min(need, CurrentReserve);          // 备弹不够就只装这么多
+        int need = weapon.magSize - magAmmo[currentIndex];       // 还差多少发装满
+        int load = Mathf.Min(need, reserveAmmo[currentIndex]);   // 备弹不够就只装这么多
         magAmmo[currentIndex] += load;                       // 装弹
         reserveAmmo[currentIndex] -= load;                   // 扣备弹
 
-        IsReloading = false;                                 // 解除换弹状态
+        isReloading = false;                                 // 走 SyncVar：各端 HookReloadingChanged → OnReloadEnd
         reloadCoroutine = null;                              // 清空协程句柄
-        RaiseAmmoChanged();                                  // 通知弹药变化
-        OnReloadEnd?.Invoke();                               // 广播换弹结束
+        PublishCurrentAmmo();                                // 装弹后的弹药同步（HUD 刷新）
+        OnReloadEnd?.Invoke();                               // 权威侧显式补一次
         if (debugLogAmmo) Debug.Log($"[武器] 换弹完成：{weapon.weaponName}");
     }
 
     // 切枪：index 越界会自动循环（-1 → 最后一把，等于长度 → 第一把）
+    // 切枪：index 越界会自动循环（-1 → 最后一把，等于长度 → 第一把）
+    // 【阶段2.3-A 改动】联机：只发"请求"，由服务器切换（SyncVar 回写后各端一起换）
     public void SwitchWeapon(int index)
     {
         if (weapons == null || weapons.Length == 0) return;
+
+        // 【修复】开镜中禁止切枪（含狙击开火后的"延迟收镜"窗口；松镜后自然恢复）
+        if (IsAiming) return ;
 
         if (index < 0) index = weapons.Length - 1;       // 往前越界 → 绕到最后一把
         if (index >= weapons.Length) index = 0;          // 往后越界 → 绕回第一把
         if (index == currentIndex) return;               // 就是当前这把，不做任何事
 
-        CancelReload();                                  // 切枪打断换弹（否则换弹会隔着武器"偷偷完成"）
-        SetAiming(false);                                // 【新增，1.7d】切枪自动收镜
-        aimLocked = false;                               // 【新增，1.7d】切枪清掉开镜锁定
-        scopeOutTime = -1f;                              // 【新增，1.7d】切枪清掉"待收镜"
-
-        currentIndex = index;                            // 切换下标
+        // 本机手感立刻生效（开镜/锁定/射速冷却都是本地表现，不等网络往返）
+        SetAiming(false);                                // 切枪自动收镜
+        aimLocked = false;                               // 切枪清掉开镜锁定
+        scopeOutTime = -1f;                              // 切枪清掉"待收镜"
         nextFireTime = Time.time;                        // 允许立刻开火（不受上一把枪的射速冷却影响）
 
-        OnWeaponChanged?.Invoke(currentIndex, CurrentWeapon);   // 广播切枪
-        RaiseAmmoChanged();                                     // 广播新枪的弹药数
+        if (NetworkServer.active || NetworkClient.active) CmdSwitchWeapon(index);   // 联机：上报
+        else ServerSwitchWeapon(index);                                              // 纯单机：直通
     }
 
-    // 打断换弹：停协程 + 复位状态
+    [Command]
+    private void CmdSwitchWeapon(int index) => ServerSwitchWeapon(index);
+
+    // 服务器侧切枪：打断换弹 + 改 SyncVar（各端 hook → 枪模/HUD 刷新）+ 发布新枪弹药
+    private void ServerSwitchWeapon(int index)
+    {
+        if (!NetUtil.IsServerSide()) return;
+        if (weapons == null || index < 0 || index >= weapons.Length) return;
+        if (index == currentIndex) return;
+
+        CancelReload();                                  // 切枪打断换弹（否则换弹会隔着武器"偷偷完成"）
+        currentIndex = index;                            // 走 SyncVar → 各端 HookWeaponIndexChanged
+        serverNextFireTime = Time.time;                  // 服务器侧同样放开射速冷却
+        OnWeaponChanged?.Invoke(currentIndex, CurrentWeapon);   // 权威侧显式补发
+        PublishCurrentAmmo();                            // 新枪弹药同步 + 本机事件
+    }
+
+    // 打断换弹：停协程 + 复位状态（【阶段2.3-A】只由服务器侧调用）
     private void CancelReload()
     {
         if (reloadCoroutine != null)
@@ -403,7 +490,7 @@ public class WeaponController : NetworkBehaviour
             StopCoroutine(reloadCoroutine);
             reloadCoroutine = null;
         }
-        IsReloading = false;
+        isReloading = false;                             // 走 SyncVar：各端解除换弹状态
     }
 
     // 弹药变化的统一出口：先广播事件，再（可选）打印调试信息

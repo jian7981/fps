@@ -143,10 +143,19 @@ public class GameManager : MonoBehaviour
     }
 
     // 对局结束（MatchRules → MatchState 广播过来）
+    // 对局结束（MatchRules → MatchState 广播过来）
     private void HandleMatchOver(int winnerTeamId)
     {
         Debug.Log("[对局] 结束！" + ((winnerTeamId == 0) ? "A队" : "B队") + " 获胜，冻结全场");
         Time.timeScale = 0f;   // 冻结全场：移动/动画/子弹全部停住（恢复在结算面板的返回按钮里）
+
+        // 【修复】结算时自动收镜：最后一杀如果开着镜（尤其狙击），镜筒会盖住结算战绩
+        WeaponController myWeapons = null;
+        if (NetworkClient.localPlayer != null)
+            myWeapons = NetworkClient.localPlayer.GetComponent<WeaponController>();   // 联机：本机自己的玩家
+        else if (currentPlayer != null)
+            myWeapons = currentPlayer.GetComponent<WeaponController>();               // 单机：GameManager 生成的玩家
+        if (myWeapons != null) myWeapons.CloseAimForMatchOver();
     }
 
     public Transform GetRandomSpawnPoint(int teamId)
