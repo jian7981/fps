@@ -1,4 +1,4 @@
-﻿using System;                          // 为了用 Action（委托）
+using System;                          // 为了用 Action（委托）
 using System.Collections;              // 为了用 IEnumerator（协程）
 using UnityEngine;                     // Unity 引擎命名空间
 using Mirror;                          // 【阶段2.2】NetworkBehaviour / SyncVar
@@ -158,14 +158,29 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
     {
         if (NetworkServer.active || NetworkClient.active)
         {
-            // 【阶段2.4-B】联机：优先按"自己队伍"的出生点（GameManager 里配的 A/B 两片半场），
-            // 找不到再回退到原来的 NetworkStartPosition 随机逻辑
+            // 【阶段2.4-C 扩展】联机复活：优先回到"自己座位对应的出生点"（进图时由 GameNetworkManager
+            // 记录在 respawnPoint 上）；如果这个点已被别人占用（有人站在附近）→ 顺延到本队下一个空点；
+            // 全被占 → 就回自己的点；最后再兜底原来的 NetworkStartPosition 随机逻辑
             Transform start = null;
             GameManager gm = FindObjectOfType<GameManager>();
             if (gm != null)
             {
                 Transform[] list = (teamId == 0) ? gm.teamASpawnPoints : gm.teamBSpawnPoints;
-                if (list != null && list.Length > 0) start = list[UnityEngine.Random.Range(0, list.Length)];
+                if (list != null && list.Length > 0)
+                {
+                    int startIndex = 0;
+                    if (respawnPoint != null)
+                    {
+                        for (int i = 0; i < list.Length; i++)
+                            if (list[i] == respawnPoint) { startIndex = i; break; }
+                    }
+                    for (int i = 0; i < list.Length; i++)
+                    {
+                        Transform candidate = list[(startIndex + i) % list.Length];
+                        if (candidate != null && !IsSpawnOccupied(candidate.position)) { start = candidate; break; }
+                    }
+                    if (start == null) start = list[startIndex];   // 全被占：只好回自己的座位点
+                }
             }
             if (start == null && NetworkManager.singleton != null)
                 start = NetworkManager.singleton.GetStartPosition();
@@ -222,6 +237,18 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
         if (cc != null) cc.enabled = true;
 
         Debug.Log($"[复活-联机] 已传送回出生点 {position}");
+    }
+
+    // 【阶段2.4-C 扩展】出生点是否"被占用"：有别的"活着的"玩家站在附近（2.5 米内）
+    private bool IsSpawnOccupied(Vector3 position)
+    {
+        Health[] all = FindObjectsOfType<Health>();
+        foreach (Health h in all)
+        {
+            if (h == this || h.isDead) continue;   // 自己 / 尸体不算
+            if (Vector3.Distance(h.transform.position, position) < 2.5f) return true;
+        }
+        return false;
     }
 
     // 【新增】由外部系统（GameManager）设置出生点：比如按队伍随机抽一个

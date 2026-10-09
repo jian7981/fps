@@ -1,20 +1,25 @@
-﻿using UnityEngine;                   // MonoBehaviour / Mathf
+using UnityEngine;                   // MonoBehaviour / Mathf
 using UnityEngine.UI;                // Slider / Button
 using TMPro;                         // TextMeshProUGUI
 
-// ============ 设置界面（鼠标灵敏度 / 主音量）============
-// 拖滑条：立刻生效（音量直接改 AudioListener；灵敏度存好，下次生成玩家时应用）
-// 点【返回】或面板被关掉时：写一次盘（不在拖动过程中每帧写盘）
+// ============ 设置界面（鼠标灵敏度 / 主音量 / 【新功能】两个开镜灵敏度）============
+// 拖滑条：立刻生效（音量直接改 AudioListener；灵敏度实时读存档）；点【返回】或面板被关掉时写一次盘
 // 挂载：Lobby 场景的 SettingsPanel 上
 public class SettingsUI : MonoBehaviour
 {
     [Header("引用")]
     public LobbyUI lobbyUI;                        // 点返回时切回主界面（拖 Canvas）
-    public Slider sensitivitySlider;               // 鼠标灵敏度滑条
+    public Slider sensitivitySlider;               // 鼠标灵敏度滑条（全局）
     public TextMeshProUGUI sensitivityValueText;   // 灵敏度数值文字（比如 "200"）
     public Slider volumeSlider;                    // 音量滑条
     public TextMeshProUGUI volumeValueText;        // 音量数值文字（比如 "80%"）
     public Button backButton;                      // 【返回】按钮
+
+    [Header("【新功能】开镜灵敏度（滑条不拖也能用，没做的先留空）")]
+    public Slider rifleScopeSlider;                     // 步枪开镜灵敏度滑条
+    public TextMeshProUGUI rifleScopeValueText;         // 数值文字（可选）
+    public Slider sniperScopeSlider;                    // 狙击枪开镜灵敏度滑条
+    public TextMeshProUGUI sniperScopeValueText;        // 数值文字（可选）
 
     private void Start()
     {
@@ -27,15 +32,33 @@ public class SettingsUI : MonoBehaviour
         volumeSlider.minValue = 0f;                                         // 音量 0~1
         volumeSlider.maxValue = 1f;
 
+        // 【新功能】两个开镜灵敏度滑条（范围整体更低）
+        if (rifleScopeSlider != null)
+        {
+            rifleScopeSlider.minValue = SettingsManager.MinScopeSensitivity;
+            rifleScopeSlider.maxValue = SettingsManager.MaxScopeSensitivity;
+            rifleScopeSlider.wholeNumbers = true;
+        }
+        if (sniperScopeSlider != null)
+        {
+            sniperScopeSlider.minValue = SettingsManager.MinScopeSensitivity;
+            sniperScopeSlider.maxValue = SettingsManager.MaxScopeSensitivity;
+            sniperScopeSlider.wholeNumbers = true;
+        }
+
         // 2. 先把滑条显示成存档里的当前值
         //    注意：先赋值、后绑事件，否则赋值那一刻会触发回调
         sensitivitySlider.value = SettingsManager.MouseSensitivity;
         volumeSlider.value = SettingsManager.MasterVolume;
+        if (rifleScopeSlider != null) rifleScopeSlider.value = SettingsManager.RifleScopeSensitivity;
+        if (sniperScopeSlider != null) sniperScopeSlider.value = SettingsManager.SniperScopeSensitivity;
         RefreshText();
 
         // 3. 绑定滑条和按钮（代码绑，Inspector 里的 OnClick 留空）
         sensitivitySlider.onValueChanged.AddListener(OnSensitivityChanged);
         volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
+        if (rifleScopeSlider != null) rifleScopeSlider.onValueChanged.AddListener(OnRifleScopeChanged);
+        if (sniperScopeSlider != null) sniperScopeSlider.onValueChanged.AddListener(OnSniperScopeChanged);
         backButton.onClick.AddListener(OnBackClicked);
     }
 
@@ -53,6 +76,20 @@ public class SettingsUI : MonoBehaviour
         RefreshText();
     }
 
+    // 【新功能】步枪开镜灵敏度
+    private void OnRifleScopeChanged(float value)
+    {
+        SettingsManager.RifleScopeSensitivity = value;
+        RefreshText();
+    }
+
+    // 【新功能】狙击枪开镜灵敏度
+    private void OnSniperScopeChanged(float value)
+    {
+        SettingsManager.SniperScopeSensitivity = value;
+        RefreshText();
+    }
+
     // 【返回】：保存一次，切回主界面
     private void OnBackClicked()
     {
@@ -66,11 +103,17 @@ public class SettingsUI : MonoBehaviour
         SettingsManager.SaveAll();
     }
 
-    // 刷新两个数值文字
+    // 刷新数值文字
     private void RefreshText()
     {
         sensitivityValueText.text = Mathf.RoundToInt(sensitivitySlider.value).ToString();     // 灵敏度显示整数
         volumeValueText.text = Mathf.RoundToInt(volumeSlider.value * 100f) + "%";             // 音量显示百分比
+
+        // 【新功能】开镜灵敏度数值（没拖文字就不刷新）
+        if (rifleScopeValueText != null && rifleScopeSlider != null)
+            rifleScopeValueText.text = Mathf.RoundToInt(rifleScopeSlider.value).ToString();
+        if (sniperScopeValueText != null && sniperScopeSlider != null)
+            sniperScopeValueText.text = Mathf.RoundToInt(sniperScopeSlider.value).ToString();
     }
 
     // 引用自检：缺哪个就报哪个

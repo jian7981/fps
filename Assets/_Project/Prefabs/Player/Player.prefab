@@ -159,6 +159,7 @@ GameObject:
   - component: {fileID: 7104840265312076604}
   - component: {fileID: 7941671030773696478}
   - component: {fileID: 6616719169097304139}
+  - component: {fileID: 8235043494377493982}
   m_Layer: 0
   m_Name: Camera
   m_TagString: Untagged
@@ -346,6 +347,22 @@ MonoBehaviour:
     type: 3}
   holeLifetime: 20
   maxHoles: 40
+--- !u!114 &8235043494377493982
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1572333272548498156}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1b4e9134018959346816a62f26feed09, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  hitSmokePrefab: {fileID: 6463494585732157636, guid: 1b09f56a53503734b80f5e23732d22fc,
+    type: 3}
+  effectLifetime: 0.3
+  spawnOffset: 0.05
 --- !u!1 &1989302091788611495
 GameObject:
   m_ObjectHideFlags: 0
@@ -3297,7 +3314,7 @@ MonoBehaviour:
   hitMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  debugLogAmmo: 1
+  debugLogAmmo: 0
   sprayHoldTime: 0.25
   scopeOutDelay: 0.25
   wallCheckDistance: 0.7

@@ -71,16 +71,22 @@ public class PlayerLook : NetworkBehaviour
     void Update()
     {
         if (!NetUtil.IsLocalControl(this)) return;     // 【阶段2.1】远程玩家不响应本机鼠标
+        if (GameplaySettingsUI.IsOpen) return;         // 【新功能】设置面板打开时不转视角
         if (health != null && health.IsDead) return;   // 死亡时不能转视角
         if (cam == null) return;                       // 没拖相机时安全退出
 
-        // 1. 【1.7d】开镜时降低灵敏度（狙击开镜后才瞄得稳）
-        float sensScale = 1f;
+        // 1. 【新功能】三档灵敏度（实时读存档，设置里改完立刻生效）：
+        //    腰射 = 全局灵敏度；步枪开镜 = 步枪开镜灵敏度；狙击开镜 = 狙击枪开镜灵敏度
+        float sens = SettingsManager.MouseSensitivity;
         if (weapons != null && weapons.IsAiming && weapons.CurrentWeapon != null)
-            sensScale = weapons.CurrentWeapon.aimSensitivityScale;
+        {
+            sens = (weapons.CurrentWeapon.weaponType == WeaponType.Sniper)
+                ? SettingsManager.SniperScopeSensitivity
+                : SettingsManager.RifleScopeSensitivity;
+        }
 
-        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * sensScale * Time.deltaTime;
-        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * sensScale * Time.deltaTime;
+        float mouseX = Input.GetAxis("Mouse X") * sens * Time.deltaTime;
+        float mouseY = Input.GetAxis("Mouse Y") * sens * Time.deltaTime;
 
         xRotation -= mouseY;
         xRotation = Mathf.Clamp(xRotation, -maxLookAngle, maxLookAngle);

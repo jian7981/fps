@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;   // List<>
+using System.Collections.Generic;   // List<>
 using UnityEngine;
 using UnityEngine.UI;               // Button
 using UnityEngine.SceneManagement;  // LoadScene
@@ -85,8 +85,23 @@ public class MatchResultUI : MonoBehaviour
     // 对局结束：填面板并显示
     private void ShowResult(int winnerTeamId)
     {
-        // 1. 胜负标题：你固定是 A 队第 1 格 → A 队赢就是"你赢了"
-        titleText.text = (winnerTeamId == 0) ? "胜利！" : "失败…";
+        // 1. 胜负标题：【阶段2.5 修正】按"你自己的队伍"判定（联机分队后不再是写死的 A 队）
+        //    联机：本机玩家对象；单机：GameManager 记的本地玩家
+        GameObject myPlayer = null;
+        if (NetworkClient.localPlayer != null) myPlayer = NetworkClient.localPlayer.gameObject;
+        else
+        {
+            GameManager gm = FindObjectOfType<GameManager>();
+            if (gm != null) myPlayer = gm.CurrentPlayer;
+        }
+
+        int myTeam = 0;
+        if (myPlayer != null)
+        {
+            Health myHealth = myPlayer.GetComponentInChildren<Health>();
+            if (myHealth != null) myTeam = myHealth.TeamId;
+        }
+        titleText.text = (winnerTeamId == myTeam) ? "胜利！" : "失败…";
 
         // 2. 最终比分
         scoreText.text = "A队 " + matchState.TeamAScore + " : " + matchState.TeamBScore + " B队";

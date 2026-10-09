@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using Mirror;   // 【阶段2.1】NetworkBehaviour
 
 [RequireComponent(typeof(CharacterController))]
@@ -72,7 +72,9 @@ public class PlayerMotor : NetworkBehaviour
         // 远程玩家（别人）的位置由 NetworkTransform 同步，这里不再驱动它移动
         bool localControl = NetUtil.IsLocalControl(this);
 
-        if (localControl)
+        // 【新功能】设置面板（G）打开时：冻结移动输入（世界照常运行，不算暂停），
+        // 但下面的动画衰减照旧跑 —— 停下来会自然回到 Idle
+        if (localControl && !GameplaySettingsUI.IsOpen)
         {
             CheckGround();
             SprintToggle();

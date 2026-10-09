@@ -1,4 +1,3 @@
-﻿using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,9 +21,10 @@ public class LobbyUI : MonoBehaviour
     public Button settingsButton;        // 【新增】【设置】按钮
 
     [Header("联机入口（【阶段2.4-C】）")]
-    public Button soloPracticeButton; // 单人练习（打开原组队界面 = 单机流程）
-    public Button joinRoomButton;        // 加入房间
-    public TMP_InputField ipInput;       // 房主 IP 输入框（留空 = localhost）
+    public Button soloPracticeButton;         // 单人练习（打开原组队界面 = 单机流程）
+    public Button quickMatchButton;           // 【扩展】快速匹配（公网版开放）
+    public Button joinRoomButton;             // 加入房间（点击打开输 IP 弹窗）
+    public JoinRoomDialogUI joinRoomDialog;   // 【扩展】加入房间弹窗（挂在 Canvas 上）
 
     private void Start()
     {
@@ -34,21 +34,25 @@ public class LobbyUI : MonoBehaviour
         selectMapButton.onClick.AddListener(OpenMapPanel);        // 点"选择地图" → 打开地图选择界面
         teamButton.onClick.AddListener(lobbyManager.CreateRoom);  // 【改，2.4-C】点"组队" = 自动创建房间（StartHost）
         if (soloPracticeButton != null) soloPracticeButton.onClick.AddListener(OpenTeamPanel);   // 单人练习 = 原组队界面
-        if (joinRoomButton != null) joinRoomButton.onClick.AddListener(OnJoinRoomClicked);       // 加入房间
+        if (quickMatchButton != null) quickMatchButton.onClick.AddListener(OnQuickMatchClicked); // 【扩展】快速匹配
+        if (joinRoomButton != null) joinRoomButton.onClick.AddListener(OnJoinRoomClicked);       // 加入房间（打开弹窗）
         settingsButton.onClick.AddListener(OpenSettingsPanel);    // 【新增】点"设置" → 打开设置界面
 
-
-        // 【阶段2.4-C】联机入口
         // 2. 游戏一开始只显示主界面
         ShowMainPanel();
     }
 
-
-    // 【阶段2.4-C】加入房间：把输入框里的 IP 交给 LobbyManager
+    // 【阶段2.4-C 扩展】点"加入房间" → 打开输入 IP 的弹窗（不再在主界面直接摆输入框）
     private void OnJoinRoomClicked()
     {
-        string ip = (ipInput != null) ? ipInput.text : "";
-        lobbyManager.JoinRoom(ip);
+        if (joinRoomDialog != null) joinRoomDialog.Show();
+        else Debug.LogWarning("[大厅] 加入房间弹窗未挂载（joinRoomDialog）");
+    }
+
+    // 【阶段2.4-C 扩展】快速匹配：公网阶段（阶段3）接服务器撮合，自动进入现有房间；现在只给提示
+    private void OnQuickMatchClicked()
+    {
+        Debug.Log("[大厅] 快速匹配将在公网版开放（阶段3：自动加入其他玩家的房间）");
     }
 
     // 打开地图选择界面
@@ -57,7 +61,7 @@ public class LobbyUI : MonoBehaviour
         mainMenu.SetActive(false);
         mapPanel.SetActive(true);
         teamPanel.SetActive(false);
-        settingsPanel.SetActive(false);   // 【新增】
+        settingsPanel.SetActive(false);
     }
 
     // 打开组队界面
@@ -66,7 +70,7 @@ public class LobbyUI : MonoBehaviour
         mainMenu.SetActive(false);
         mapPanel.SetActive(false);
         teamPanel.SetActive(true);
-        settingsPanel.SetActive(false);   // 【新增】
+        settingsPanel.SetActive(false);
     }
 
     // 【新增】打开设置界面
@@ -84,7 +88,7 @@ public class LobbyUI : MonoBehaviour
         mainMenu.SetActive(true);
         mapPanel.SetActive(false);
         teamPanel.SetActive(false);
-        settingsPanel.SetActive(false);   // 【新增】
+        settingsPanel.SetActive(false);
     }
 
     // 【阶段2.4-C】藏掉大厅的所有面板（进房间时用——房间面板显示期间不该看到主菜单）
@@ -96,7 +100,6 @@ public class LobbyUI : MonoBehaviour
         settingsPanel.SetActive(false);
     }
 
-
     // 引用自检：缺哪个就明确报哪个，避免对着 NullReference 发呆
     private bool CheckRefs()
     {
@@ -104,10 +107,10 @@ public class LobbyUI : MonoBehaviour
         if (mainMenu == null) { Debug.LogError("LobbyUI：mainMenu 未赋值"); return false; }
         if (mapPanel == null) { Debug.LogError("LobbyUI：mapPanel 未赋值"); return false; }
         if (teamPanel == null) { Debug.LogError("LobbyUI：teamPanel 未赋值"); return false; }
-        if (settingsPanel == null) { Debug.LogError("LobbyUI：settingsPanel 未赋值"); return false; }     // 【新增】
+        if (settingsPanel == null) { Debug.LogError("LobbyUI：settingsPanel 未赋值"); return false; }
         if (selectMapButton == null) { Debug.LogError("LobbyUI：selectMapButton 未赋值"); return false; }
         if (teamButton == null) { Debug.LogError("LobbyUI：teamButton 未赋值"); return false; }
-        if (settingsButton == null) { Debug.LogError("LobbyUI：settingsButton 未赋值"); return false; }   // 【新增】
+        if (settingsButton == null) { Debug.LogError("LobbyUI：settingsButton 未赋值"); return false; }
         return true;
     }
 }

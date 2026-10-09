@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using Mirror;   // 【阶段2.1】NetworkServer / NetworkClient
 using Shared;   // MatchConfig / MatchConfigTransfer / Constants / PlayerSlot
 
@@ -18,6 +18,9 @@ public class GameManager : MonoBehaviour
 
     private GameObject currentPlayer;    // 记住生成的玩家
     private MatchConfig matchConfig;     // 本局配置（大厅组队界面带进来的）
+
+    // 【阶段2.5】给结算面板这类外部脚本用的只读出口（单机时怎么找到"本机玩家"）
+    public GameObject CurrentPlayer => currentPlayer;
 
     // 【步骤1.5】对局流程的两个组件（挂在同一个物体上，Awake 里自动拿）
     private MatchState matchState;       // 比分 / 是否结束

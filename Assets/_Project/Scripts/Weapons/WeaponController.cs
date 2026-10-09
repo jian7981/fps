@@ -1,4 +1,4 @@
-﻿using System;                  // Action（事件）
+using System;                  // Action（事件）
 using System.Collections;      // IEnumerator（协程）
 using UnityEngine;             // Unity 核心
 using Mirror;                  // 【阶段2.1】NetworkBehaviour
@@ -135,6 +135,7 @@ public class WeaponController : NetworkBehaviour
     {
         // 【阶段2.1】联机时远程玩家（别人）不响应本机的键鼠输入
         if (!NetUtil.IsLocalControl(this)) return;
+        if (GameplaySettingsUI.IsOpen) return;   // 【新功能】设置面板打开时屏蔽射击/换弹/切枪输入
 
         // 【输入与执行分离】这里只做"检测输入 → 调方法"
         if (Input.GetMouseButton(0)) TryFire();                        // 左键：按住连发
@@ -247,7 +248,8 @@ public class WeaponController : NetworkBehaviour
         currentSpread = Mathf.MoveTowards(currentSpread, baseSpread, weapon.spreadRecover * Time.deltaTime);
     }
 
-    // 【新增，1.8b】贴墙收枪检测：相机正前方 + 右前方 45° 各一条短射线（枪在右下角，这两个方向最容易被墙挡）
+    // 【新增，1.8b】贴墙收枪检测：相机正前方 + 右前方 45° + 【2.5】左前方 45° 三条短射线
+    // （枪在右下角，正前/右前最容易被挡；左前补上后，贴左墙横移也不会穿模）
     // 一份数据管两件事：① 枪模压低（表现层读 WallAmount）② 收枪中禁止开火（IsWeaponBlocked）
     private void UpdateWallLower()
     {
@@ -255,9 +257,11 @@ public class WeaponController : NetworkBehaviour
         if (aimCamera != null)
         {
             float front = WallCheck(aimCamera.transform.forward);   // 正前方
-            Vector3 diagonal = (aimCamera.transform.forward + aimCamera.transform.right).normalized;
-            float rightFront = WallCheck(diagonal);                 // 右前方 45°
-            target = Mathf.Max(front, rightFront);                  // 哪个方向更贴近用哪个
+            Vector3 rightDiagonal = (aimCamera.transform.forward + aimCamera.transform.right).normalized;
+            float rightFront = WallCheck(rightDiagonal);            // 右前方 45°
+            Vector3 leftDiagonal = (aimCamera.transform.forward - aimCamera.transform.right).normalized;
+            float leftFront = WallCheck(leftDiagonal);              // 【2.5】左前方 45°
+            target = Mathf.Max(front, Mathf.Max(rightFront, leftFront));   // 哪个方向更贴近用哪个
         }
 
         WallAmount = Mathf.MoveTowards(WallAmount, target, wallLowerSpeed * Time.deltaTime);
