@@ -45,6 +45,7 @@ public class WeaponData : ScriptableObject
     public float maxSpread = 5f;               // 散布上限
     public float spreadRecover = 4f;           // 每秒恢复多少度（视觉上=准星收紧速度）
     public float aimSpread = 0.05f;            // 开镜时的散布（接近 0 = 指哪打哪）
+    public float crouchSpreadScale = 0.6f;     // 【新增】蹲下时的腰射散布倍率（0.6 = 蹲下散布只有站着的六成；1 = 蹲下不影响）
 
     [Header("镜头后坐力（开火时视角上跳）")]
     public float recoilPitch = 0.35f;          // 腰射-垂直：每发视角上跳多少度（主分量）

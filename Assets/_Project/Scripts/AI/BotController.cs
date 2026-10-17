@@ -52,12 +52,14 @@ public class BotController : MonoBehaviour
     private Vector3 lastKnownPosition;        // 最后一次看见敌人的位置
     private float lostSightTimer;             // 跟丢敌人已经多少秒
     private float nextFireTime;               // 下一次允许开枪的时间点
+    private RemoteGunAudio gunAudio;          // 【2.5-音效B】3D 枪声（挂在根上，没配就静默）
 
     private void Awake()
     {
         controller = GetComponent<CharacterController>();
         health = GetComponent<Health>();
         targeting = GetComponent<BotTargeting>();
+        gunAudio = GetComponent<RemoteGunAudio>();   // 【2.5-音效B】
         if (animator == null) animator = GetComponentInChildren<Animator>();   // 和 PlayerMotor 一样：自动往下找
 
         // 忘挂 BotTargeting 就明确报错，别让 NullReference 到处飞
@@ -264,6 +266,8 @@ public class BotController : MonoBehaviour
     {
         if (Time.time < nextFireTime) return;              // 射速冷却还没到
         nextFireTime = Time.time + 1f / fireRate;
+
+        if (gunAudio != null) gunAudio.PlayShot(0);        // 【2.5-音效B】Bot 手里步枪的 3D 枪声
 
         Vector3 eye = transform.position + Vector3.up * eyeHeight;
         Vector3 aimPoint = target.transform.position + Vector3.up * 1.0f;   // 瞄准胸口

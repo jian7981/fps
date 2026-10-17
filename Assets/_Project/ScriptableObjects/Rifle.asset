@@ -30,6 +30,7 @@ MonoBehaviour:
   maxSpread: 5
   spreadRecover: 5
   aimSpread: 0.01
+  crouchSpreadScale: 0.6
   recoilPitch: 0.35
   recoilYawRandom: 0.15
   recoilRecover: 0

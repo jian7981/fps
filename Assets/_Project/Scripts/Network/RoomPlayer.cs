@@ -12,16 +12,75 @@ public class RoomPlayer : NetworkRoomPlayer
     [SyncVar] public string displayName = "";   // 房间/结算显示的名字（暂用"玩家 N"，以后接昵称）
     [SyncVar] public int teamId;                // 0=A队，1=B队
     [SyncVar] public int seatIndex;             // 【扩展】本队内座位：0~4 = 1~5 号位
+    [SyncVar] public bool isRoomOwner;          // 【阶段3】房主身份：第一个进房的人（逻辑标记，不依赖"谁跑服务器"→ 云服务器上也有房主）
+    [SyncVar] public string roomCode = "";      // 【阶段3-房间码】服务器向登记服务注册成功后下发；房间面板显示给玩家分享
+    [SyncVar] public int joinOrder;             // 【阶段3-玩家名】进房顺序（1 = 房主）；名字与队内排序都用它
+
+    // 【阶段4】账号令牌：**只留在服务器内存里**，绝不做 SyncVar —— 那是账号凭证，不该下发给任何客户端。
+    // 用途只有一个：对局结束后服务器替这名玩家上报战绩（客户端自己拿令牌是调不通那个接口的）。
+    [System.NonSerialized] public string accountToken = "";
+
+    // 【阶段4】把账号身份报给服务器。服务器只拿它做两件事：
+    //   ① 把 displayName 换成真昵称（SyncVar → 房间界面与对局战绩表都看到真名）
+    //   ② 存下令牌备"对局结束上报战绩"
+    //
+    // 【Bug 修复】原来写在 OnStartLocalPlayer 里 —— 实测房间制下这个钩子没按预期触发，
+    // 昵称一直没送到服务器（房间面板始终"玩家 1/2"）。改成在 Update 里做**一次性**上报：
+    // 本机玩家在房间里的第一次 Update 一定跑得到，不依赖任何钩子的触发时机。
+    private bool accountAttempted;
+
+    private void Update()
+    {
+        if (accountAttempted || !isLocalPlayer) return;
+        accountAttempted = true;              // 只试一次：没登录也不用每帧重试
+
+        AuthService.Init();                   // 先把本地存档里的令牌读出来（幂等）
+        if (!AuthService.IsLoggedIn)
+        {
+            Debug.Log("[房间] 本机玩家未登录 → 保持\"玩家 N\"（对局结束不写战绩）");
+            return;
+        }
+
+        CmdSetAccount(AuthService.CurrentNickname, AuthService.CurrentToken);
+    }
+
+    [Command]
+    private void CmdSetAccount(string nickname, string token)
+    {
+        // 昵称走 SyncVar → 房间界面与对局战绩表都会显示真昵称
+        if (!string.IsNullOrWhiteSpace(nickname)) displayName = nickname.Trim();
+        accountToken = token ?? "";
+        Debug.Log($"[房间] {displayName} 已绑定账号（对局结束会写入战绩）");
+    }
 
     // 服务器：房间玩家生成时——分配名字、队伍、座位
-    // 注意：不依赖 Mirror 的 index（调试 UI 里实测它没生效），直接用连接的 connectionId
     public override void OnStartServer()
     {
-        int connId = (connectionToClient != null) ? connectionToClient.connectionId : index;
-        displayName = "玩家 " + (connId + 1);
-        teamId = connId % 2;                    // 初始轮流分 A/B（进房后可以自己换位/换队）
+        // 【修复】原来用 connectionId 的奇偶分队 —— 但 Mirror 的 connectionId 是随机大数（不是 0/1/2 递增），
+        // 实际分队是随机的（日志实测：每个客户端每次进来随机落 A 或 B），和"轮流分"的意图不符。
+        // 改用 NetworkRoomManager 的 clientIndex（每来一个玩家 +1，稳定递增）→ 真正按加入顺序轮流分。
+        NetworkRoomManager room = NetworkManager.singleton as NetworkRoomManager;
+        joinOrder = (room != null && room.clientIndex > 0) ? room.clientIndex : (index + 1);   // 房主 = 1、第二个 = 2…
+        teamId = (joinOrder - 1) % 2;           // 房主 A、第二个 B、第三个 A……（进房后可以自己换位/换队）
         seatIndex = FindFreeSeat(teamId);       // 落在本队第一个空位
-        Debug.Log($"[房间] {displayName} 进房：{(teamId == 0 ? "A" : "B")}队 {seatIndex + 1} 号位");
+
+        // 【阶段3-玩家名】名字也用"进房顺序"，不再用 connectionId —— Mirror 的 connectionId 是随机大数，
+        // 之前会显示成"玩家 23456789"，朋友看到不明所以。现在房主是"玩家 1"、第二个进来的是"玩家 2"。
+        displayName = "玩家 " + joinOrder;
+
+        // 【阶段3】房主 = 第一个进房的人：场上还没有任何房主 → 就是自己
+        // （roomSlots 在 Start() 里才会把自己加进去，所以这里遍历到的是"之前进房的人"）
+        isRoomOwner = true;
+        if (room != null)
+        {
+            foreach (NetworkRoomPlayer basePlayer in room.roomSlots)
+            {
+                RoomPlayer rp = basePlayer as RoomPlayer;
+                if (rp != null && rp.isRoomOwner) { isRoomOwner = false; break; }
+            }
+        }
+
+        Debug.Log($"[房间] {displayName} 进房：{(teamId == 0 ? "A" : "B")}队 {seatIndex + 1} 号位{(isRoomOwner ? "（房主）" : "")}");
     }
 
     // 找本队第一个没被占的座位（自己已经在 roomSlots 里，跳过自己）
@@ -67,5 +126,18 @@ public class RoomPlayer : NetworkRoomPlayer
         teamId = newTeam;      // 走 SyncVar：各端房间界面自动刷新
         seatIndex = newSeat;
         Debug.Log($"[房间] {displayName} 换到 {(newTeam == 0 ? "A" : "B")}队 {newSeat + 1} 号位");
+    }
+
+    // 【阶段3】房主请求开始对局：云服务器模式下房主是普通玩家（不是服务器本机），
+    // 不能直接切场景 → 发请求让服务器校验（房主身份 + 全员准备）后执行切换。
+    [Command]
+    public void CmdRequestStartGame()
+    {
+        if (!isRoomOwner) return;                              // 只有房主
+        if (NetworkManager.loadingSceneAsync != null) return;  // 已有场景切换在进行 → 忽略
+        GameNetworkManager room = NetworkManager.singleton as GameNetworkManager;
+        if (room == null || !room.allPlayersReady) return;     // 必须全员准备
+        Debug.Log("[房间] 房主请求开始 → 切换场景");
+        room.ServerChangeScene(room.GameplayScene);
     }
 }

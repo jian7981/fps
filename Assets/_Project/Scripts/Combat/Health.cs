@@ -23,7 +23,16 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
     [Header("队伍（0=A队，1=B队）")]
     // 【阶段2.4-B】改 SyncVar：进图时服务器按房间分配下发，客户端的上色（TeamColorApplier）才能对上
     [SyncVar] private int teamId = 0;
+    // 【阶段3-玩家名】进房顺序（1 = 房主）。房间玩家进图前由 GameNetworkManager 写入 → 随初始同步包下发，
+    // 战绩表各端读到的名字才一致（和 teamId 同一套做法）。
+    [SyncVar] private int displayIndex;
     [SerializeField] private bool allowFriendlyFire = false;
+
+    // 【阶段4】账号身份（**只在服务器上有效**）：昵称 → 战绩表里显示的名字；令牌 → 对局结束后服务器上报战绩用。
+    // 用 [NonSerialized] 普通字段：不进预制体序列化、也绝不走网络（令牌是账号凭证，不能发给客户端）。
+    // 由 GameNetworkManager 在"生成之前"写入（和 teamId / displayIndex 同一时机）。
+    [System.NonSerialized] public string accountNickname = "";
+    [System.NonSerialized] public string accountToken = "";
 
     [Header("死亡后自动复活")]
     [SerializeField] private bool autoRespawn = true;
@@ -67,10 +76,11 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
         MatchRules rules = FindObjectOfType<MatchRules>();
         if (rules == null) return;
 
-        // 玩家对象带连接：显示"玩家 1 / 玩家 2"；以后联机 Bot 没有连接，退回"玩家"（2.4 再细化名字）
-        string displayName = (connectionToClient != null)
-            ? "玩家 " + (connectionToClient.connectionId + 1)
-            : "玩家";
+        // 【阶段4 改动】优先用登录后的**真昵称**（由 GameNetworkManager 进图前写入）；
+        // 没登录就用进房顺序"玩家 N"；联机 Bot 两者都没有 → "玩家"
+        string displayName = !string.IsNullOrEmpty(accountNickname)
+            ? accountNickname
+            : (displayIndex > 0 ? "玩家 " + displayIndex : "玩家");
         rules.RegisterCombatant(this, displayName);
     }
 
@@ -261,5 +271,19 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
     public void SetTeamId(int newTeamId)
     {
         teamId = newTeamId;
+    }
+
+    // 【阶段3-玩家名】由 GameNetworkManager 在"生成之前"调用，把房间里的进房顺序带到游戏玩家身上
+    public void SetDisplayIndex(int order)
+    {
+        displayIndex = order;
+    }
+
+    // 【阶段4】由 GameNetworkManager 在"生成之前"调用：把账号昵称与令牌带到游戏玩家身上
+    //（令牌存在 [NonSerialized] 普通字段里 → 只活在服务器内存，不入序列化、不走网络）
+    public void SetAccount(string nickname, string token)
+    {
+        accountNickname = nickname ?? "";
+        accountToken = token ?? "";
     }
 }

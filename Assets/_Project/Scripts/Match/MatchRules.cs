@@ -18,6 +18,11 @@ public class MatchRules : MonoBehaviour
     // Health → 他在 MatchState 里的那条战绩（死亡/击杀/助攻都记到它头上）
     private readonly Dictionary<Health, CombatantStats> statsByHealth = new Dictionary<Health, CombatantStats>();
 
+    // 【阶段4】本局的唯一 id：对局结束上报战绩时用，同一局所有人都用它。
+    // 重开一局 = map1 场景重载 = 这个组件重新创建 → GUID 天然每局不同。
+    // 配合后端 match_report_log 的 (match_id, user_id) 主键 → 重复上报天然幂等。
+    private readonly string matchId = System.Guid.NewGuid().ToString();
+
     // 死者 → （打过他的人 → 最后一次打他的时间），用来判定助攻
     private readonly Dictionary<Health, Dictionary<Health, float>> recentAttackers
         = new Dictionary<Health, Dictionary<Health, float>>();
@@ -103,8 +108,39 @@ public class MatchRules : MonoBehaviour
         if (state.GetScore(scoringTeam) >= targetKills)
         {
             state.EndMatch(scoringTeam);
+            ReportStatsToAccountService(scoringTeam);   // 【阶段4】服务器替每个已登录玩家上报战绩
             Debug.Log("[对局] " + ((scoringTeam == 0) ? "A队" : "B队")
                 + " 先到 " + targetKills + " 杀，获胜！");
         }
+    }
+
+    // ==================== 【阶段4】对局结束：把战绩写进账号 ====================
+    // 由**服务器**替每个玩家上报（玩家客户端没有上报密钥，自己调那个接口是调不通的 —— 见后端 StatsEndpoints）。
+    // 没配 -lobbyserver、或玩家没登录（单人练习 / 局域网 / Bot）→ 直接跳过，一切照旧。
+    private void ReportStatsToAccountService(int winnerTeamId)
+    {
+        if (!NetUtil.IsServerSide()) return;     // 只由权威侧上报
+        if (!LobbyService.HasService) return;    // 没配登记服务 → 整个账号功能是关闭的
+
+        int reported = 0;
+        foreach (KeyValuePair<Health, CombatantStats> pair in statsByHealth)
+        {
+            Health health = pair.Key;
+            CombatantStats stats = pair.Value;
+            if (health == null || stats == null) continue;
+            if (string.IsNullOrEmpty(health.accountToken)) continue;   // 这名玩家没登录 → 不写他的战绩
+
+            bool won = (stats.teamId == winnerTeamId);
+            StartCoroutine(AuthService.ReportMatchStats(
+                health.accountToken, matchId, stats.teamId,
+                stats.kills, stats.deaths, stats.assists, won,
+                result => Debug.Log("[战绩] " + stats.displayName + " 上报成功：经验 +" + result.expGain
+                    + (result.leveledUp ? "，升到 " + result.level + " 级" : "")
+                    + (result.duplicated ? "（这一局之前已报过，未重复累加）" : "")),
+                err => Debug.LogWarning("[战绩] " + stats.displayName + " 上报失败：" + err)));
+            reported++;
+        }
+
+        Debug.Log("[战绩] 本局 " + matchId + " 共上报 " + reported + " 名登录玩家");
     }
 }

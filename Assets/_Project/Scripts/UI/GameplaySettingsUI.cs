@@ -1,9 +1,12 @@
 using UnityEngine;
 using UnityEngine.UI;   // Slider / Button
 using TMPro;            // TextMeshProUGUI
+using Mirror;                      // 【新功能】联机判断 + 本机玩家（退出到组队界面）
+using Shared;                      // Constants（大厅场景名）
+using UnityEngine.SceneManagement; // LoadScene（单机退出到大厅）
 
 // 【新功能】游戏内设置面板（G 键呼出/关闭；不暂停游戏）
-// 内容：主音量 + 全局灵敏度 + 步枪开镜灵敏度 + 狙击枪开镜灵敏度（三档灵敏度实时生效）
+// 内容：主音量 + 全局灵敏度 + 步枪开镜灵敏度 + 狙击枪开镜灵敏度（三档灵敏度实时生效） + 退出对局（回大厅）
 // 规则：
 //   1) 按 G 开/关；也可点面板里的"关闭"按钮
 //   2) 打开时：解锁鼠标 + 冻结本地操作（视角/开火/移动）；世界照常运行（绝不改 Time.timeScale）
@@ -25,6 +28,7 @@ public class GameplaySettingsUI : MonoBehaviour
     public Slider sniperScopeSlider;              // 狙击枪开镜灵敏度
     public TextMeshProUGUI sniperScopeText;       // （可选）
     public Button closeButton;                    // 面板上的"关闭"按钮（可选）
+    public Button exitMatchButton;                // 【新功能】退出对局：不想玩的玩家直接回大厅（客机=自己退出、其他人继续打；主机=解散房间；单机=回大厅组队界面）
 
     private bool loading;   // 载入滑条值时屏蔽回调（避免"初始化赋值→误触发保存"）
 
@@ -68,6 +72,7 @@ public class GameplaySettingsUI : MonoBehaviour
         if (rifleScopeSlider != null) rifleScopeSlider.onValueChanged.AddListener(OnRifleScopeChanged);
         if (sniperScopeSlider != null) sniperScopeSlider.onValueChanged.AddListener(OnSniperScopeChanged);
         if (closeButton != null) closeButton.onClick.AddListener(Close);
+        if (exitMatchButton != null) exitMatchButton.onClick.AddListener(OnExitMatchClicked);   // 【新功能】退出对局（回大厅）
 
         panel.SetActive(false);
         IsOpen = false;
@@ -112,6 +117,42 @@ public class GameplaySettingsUI : MonoBehaviour
         }
 
         SettingsManager.SaveAll();   // 关闭时统一写一次盘（持久化）
+    }
+
+    // 【新功能】"退出对局"按钮：让不想玩的玩家直接退出到大厅
+    //   联机-客机：StopClient → 只有自己回大厅（Mirror 自动回 offlineScene=Lobby），其他人继续打
+    //   联机-主机：StopHost → 会话承载在主机上，主机退出 = 解散房间，所有人回大厅
+    //   单机：没有会话，直接回大厅并打开组队界面
+    private void OnExitMatchClicked()
+    {
+        Time.timeScale = 1f;                       // 【保险】结算冻结（=0）状态下退出也能正常回大厅
+
+        if (NetworkServer.active || NetworkClient.active)
+        {
+            Close();                                // 收起面板 + 保存设置
+            Cursor.lockState = CursorLockMode.None; // 大厅菜单需要鼠标（不依赖玩家对象销毁时机）
+            Cursor.visible = true;
+
+            if (NetworkServer.active)
+            {
+                Debug.Log("[设置] 主机退出对局 → 解散房间，所有人回大厅");
+                NetworkManager.singleton.StopHost();
+            }
+            else
+            {
+                Debug.Log("[设置] 客机退出对局 → 自己回大厅，其他人继续打");
+                NetworkManager.singleton.StopClient();
+            }
+        }
+        else
+        {
+            // 单机：回大厅 + 直接打开组队界面
+            LobbyUI.openTeamPanelOnLoad = true;    // 跨场景标记（LobbyUI.Start 里读取）
+            Close();                               // 收起面板 + 保存设置
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            SceneManager.LoadScene(Constants.LobbySceneName);
+        }
     }
 
     // ---- 滑条回调：统一"loading 期间不响应"，防止初始化时误写 ----

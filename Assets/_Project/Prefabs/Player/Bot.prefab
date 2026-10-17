@@ -1194,6 +1194,22 @@ PrefabInstance:
         type: 3}
       insertIndex: -1
       addedObject: {fileID: 3419877931748450570}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8851c84ea91108f469f2b8545ad61a74,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6583671792037485694}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8851c84ea91108f469f2b8545ad61a74,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4186140939714328777}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8851c84ea91108f469f2b8545ad61a74,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 295695436482016589}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8851c84ea91108f469f2b8545ad61a74,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8212460388091505898}
   m_SourcePrefab: {fileID: 100100000, guid: 8851c84ea91108f469f2b8545ad61a74, type: 3}
 --- !u!4 &849525872655315937 stripped
 Transform:
@@ -1258,7 +1274,6 @@ MonoBehaviour:
   maxHp: 100
   maxArmor: 50
   armorAbsorbRatio: 0.6
-  teamId: 0
   allowFriendlyFire: 0
   autoRespawn: 1
   respawnDelay: 3
@@ -1303,7 +1318,7 @@ MonoBehaviour:
   fireRate: 2
   fireRange: 60
   spreadAngle: 2.5
-  drawDebugShots: 1
+  drawDebugShots: 0
   animator: {fileID: 0}
   speedParameter: Speed
   animDamp: 10
@@ -1352,9 +1367,110 @@ MonoBehaviour:
   serverOnly: 0
   visibility: 0
   hasSpawned: 0
+--- !u!114 &6583671792037485694
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2634357841306497203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0bd98126ec4cd0d408996fac029a24d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  handBone: {fileID: 3601713551220175402}
+  gunPrefabs:
+  - {fileID: 1487774384131766, guid: ee329c3cd08e58645834d20702d7f6c6, type: 3}
+  - {fileID: 1829597508155286, guid: 7359baf27e84aa44cafac3788c8be0f1, type: 3}
+  holdLocalPositions:
+  - {x: -0.078, y: 0.192, z: 0.012}
+  - {x: -0.062, y: 0.213, z: 0.006}
+  holdLocalEulers:
+  - {x: 80.893, y: -33.374, z: 54.22}
+  - {x: 87.258, y: -55.447, z: 34.333}
+  holdLocalScales:
+  - {x: 1.25, y: 1.25, z: 1.25}
+  - {x: 0.8, y: 0.8, z: 0.8}
+  fallbackIndex: 0
+  wallAdjustEnabled: 1
+  wallCheckDistance: 1.1
+  fullLowerDistance: 0.4
+  wallLowerAngle: 75
+  wallLowerOffset: {x: -0.1, y: -0.25, z: -0.12}
+  wallLowerSpeed: 8
+--- !u!114 &4186140939714328777
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2634357841306497203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fcdd42b493db4974287d65052d169ee1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  mode: 0
+  modelRoot: {fileID: 0}
+  manualYaw: 45
+  logResult: 1
+  debugLiveFacing: 1
+  liveCheckInterval: 3
+--- !u!114 &295695436482016589
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2634357841306497203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8de1f19b0021074eb3f2162ce8f6b57, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  shotSounds:
+  - {fileID: 8300000, guid: d0209041c6e11a74290de1942b828184, type: 3}
+  sourceLocalOffset: {x: 0, y: 1.4, z: 0.2}
+  minDistance: 3
+  maxDistance: 80
+  volume: 1
+  pitchRandom: 0.06
+--- !u!114 &8212460388091505898
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2634357841306497203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9e424dce845aa514883e6e472ea70b01, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  stepSounds: []
+  stepDistance: 2.4
+  minStepInterval: 0.2
+  minMoveSpeed: 0.8
+  walkSpeed: 1.5
+  runSpeed: 5
+  walkVolume: 0.5
+  runVolume: 1
+  ownVolumeScale: 0.464
+  otherVolumeScale: 1
+  minDistance: 2
+  maxDistance: 40
+  pitchRandom: 0.08
+  teleportDistance: 2
 --- !u!4 &3268097988365901197 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 366175167995203695, guid: 8851c84ea91108f469f2b8545ad61a74,
+    type: 3}
+  m_PrefabInstance: {fileID: 2904390399619206626}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &3601713551220175402 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1852576806548013000, guid: 8851c84ea91108f469f2b8545ad61a74,
     type: 3}
   m_PrefabInstance: {fileID: 2904390399619206626}
   m_PrefabAsset: {fileID: 0}

@@ -19,6 +19,14 @@ public class WeaponFeedback : MonoBehaviour
     [Header("开火音效（顺序同上；还没配素材的格子留空即可）")]
     [SerializeField] private AudioClip[] fireSounds;
 
+    [Header("换弹音效（开始 / 完成各一个；留空静默）")]
+    [SerializeField] private AudioClip reloadStartSound;
+    [SerializeField] private AudioClip reloadEndSound;
+
+    [Header("音量（调试用：直接在 Inspector 里调大小）")]
+    [Range(0f, 1f)] [SerializeField] private float fireVolume = 1f;     // 开火音
+    [Range(0f, 1f)] [SerializeField] private float reloadVolume = 1f;   // 换弹音（开始/完成共用）
+
     [Header("音源（留空 = 自动获取，没有就自动加一个）")]
     [SerializeField] private AudioSource audioSource;
 
@@ -98,6 +106,8 @@ public class WeaponFeedback : MonoBehaviour
         if (weaponController == null) return;
         weaponController.OnFired += HandleFired;                 // 开火
         weaponController.OnWeaponChanged += HandleWeaponChanged; // 切枪
+        weaponController.OnReloadStart += HandleReloadStart;     // 换弹开始
+        weaponController.OnReloadEnd += HandleReloadEnd;         // 换弹完成
     }
 
     private void OnDisable()
@@ -105,6 +115,8 @@ public class WeaponFeedback : MonoBehaviour
         if (weaponController == null) return;
         weaponController.OnFired -= HandleFired;                 // 配对取消订阅
         weaponController.OnWeaponChanged -= HandleWeaponChanged;
+        weaponController.OnReloadStart -= HandleReloadStart;
+        weaponController.OnReloadEnd -= HandleReloadEnd;
     }
 
     // 开火：播当前枪的火光 + 音效
@@ -157,6 +169,17 @@ public class WeaponFeedback : MonoBehaviour
         if (fireSounds == null || index < 0 || index >= fireSounds.Length) return;
         AudioClip clip = fireSounds[index];
         if (clip == null) return;              // 空槽跳过
-        audioSource.PlayOneShot(clip);         // 一发一声，连发时自动叠放
+        audioSource.PlayOneShot(clip, fireVolume);   // 【修复】音量按次传，不动音源总音量（防干扰共用音源的其他音效）
+    }
+
+    // 换弹开始 / 完成：各播一个音（没配就静默）
+    private void HandleReloadStart(float duration) { PlayClip(reloadStartSound, reloadVolume); }
+    private void HandleReloadEnd() { PlayClip(reloadEndSound, reloadVolume); }
+
+    // 播一个 2D 音效（空引用静默跳过；音量按次传，不动音源总音量）
+    private void PlayClip(AudioClip clip, float vol)
+    {
+        if (clip == null || audioSource == null) return;
+        audioSource.PlayOneShot(clip, vol);
     }
 }

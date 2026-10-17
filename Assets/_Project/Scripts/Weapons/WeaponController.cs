@@ -68,17 +68,30 @@ public class WeaponController : NetworkBehaviour
     private float nextFireTime;            // 下次允许开火的时间点
     private Coroutine reloadCoroutine;     // 换弹协程句柄（切枪时用它打断换弹）
     private Health selfHealth;             // 自己的 Health（死了不能开火）
+    private PlayerMotor playerMotor;       // 【新增】蹲下状态来源（蹲下收紧腰射散布；Bot 没有 → 取不到也安全）
     private float currentSpread;           // 【新增，1.7d】当前散布：开枪变大、随时间恢复
     private float lastFireTime = -10f;     // 【新增，1.7d】最近一次开火的时间（判断"是否正在连发"用）
     private bool aimLocked;                // 【新增，1.7d】射击后的开镜锁定（狙击"一枪一镜"）：松开右键前不能再开镜
     private float scopeOutTime = -1f;      // 【新增，1.7d】待收镜的时间点（-1 = 没有等待中的收镜）
     private bool matchOverAimLock;         // 【修复】对局已结束（结算弹出后禁止再开镜，镜筒会挡结算）
-    private float serverNextFireTime;   // 【阶段2.2】服务器侧的射速校验（防连发宏）
+
+    // 【阶段2.2】服务器侧射速校验（防连发宏）
+    // 【修复】改成"额度制"：按真实时间累积开火额度（每 1/fireRate 秒攒 1 点，上限 maxFireCredit 点），
+    // 每放行一发扣 1 点。旧写法比较的是"消息到达时刻"——服务器只要卡顿一下，积压的一批消息会在
+    // 同一帧到达（到达间隔被压缩成 0）→ 合法连发被误拒：客户端已经画了弹孔、加了后坐力，
+    // 服务器却没扣弹 → 表现就是"弹孔数量明显多于子弹消耗数"。额度制对积压免疫；
+    // 真超频的宏/作弊把额度耗尽后照样会被拒绝。
+    [Header("射速校验（服务器侧，防连发宏）")]
+    [Tooltip("开火额度上限（发）：服务器卡顿积压后允许一次补发几发；正常按射速累积，挂机攒再多也不超过这个数")]
+    [SerializeField] private int maxFireCredit = 5;
+    private float fireCredit;            // 当前开火额度（发）
+    private float lastFireCreditTime;    // 上次结算额度的时刻
 
     private void Awake()
     {
         if (aimCamera == null) aimCamera = GetComponentInChildren<Camera>();
         selfHealth = GetComponent<Health>();
+        playerMotor = GetComponent<PlayerMotor>();   // 【新增】拿不到也没事（没有蹲下逻辑的角色）
 
         if (weapons == null || weapons.Length == 0)
         {
@@ -192,7 +205,7 @@ public class WeaponController : NetworkBehaviour
         nextFireTime = Time.time + 1f / weapon.fireRate;             // 本机射速节奏（手感，保持不动）
 
         // 【改，1.7d】顺序很重要：先算"本发的方向"（用开枪前的散布），再增加散布
-        // 这样第一发永远最准：狙击开镜指哪打哪；散布增量只影响后续子弹（腰射连发才越打越散）
+        // 【修复】每一枪都带上"当前实际散布"：基础散布任何一枪都在（见 GetSpreadDirection 的下限）；增量只让后续子弹越打越散
         Vector3 fireDirection = GetSpreadDirection();
         currentSpread = Mathf.Min(weapon.maxSpread, currentSpread + weapon.spreadPerShot);   // 散布变大（只影响后续子弹）
         lastFireTime = Time.time;                                    // 记住开火时刻（连发期间暂停恢复）
@@ -225,11 +238,24 @@ public class WeaponController : NetworkBehaviour
     // 关键：半径取 sqrt(random)，否则随机点会往圆心堆，散布看起来"不够散"
     private Vector3 GetSpreadDirection()
     {
-        if (currentSpread <= 0.001f) return aimCamera.transform.forward;   // 没有散布 → 直射
+        // 【修复】下限 = 当前站姿的基础散布：任何一枪（含第一枪）都至少有它 → "散布一直都有"
+        WeaponData weapon = CurrentWeapon;
+        float baseSpread = weapon != null ? (IsAiming ? weapon.aimSpread : HipBaseSpread(weapon)) : 0f;
+        float spread = Mathf.Max(currentSpread, baseSpread);
+        if (spread <= 0.001f) return aimCamera.transform.forward;          // 没有散布 → 直射
         float angle = Random.Range(0f, Mathf.PI * 2f);                     // 随机方向（弧度）
-        float radius = Mathf.Sqrt(Random.value) * currentSpread;           // 随机半径（单位：度）
+        float radius = Mathf.Sqrt(Random.value) * spread;                  // 随机半径（单位：度）
         Quaternion offset = Quaternion.Euler(Mathf.Sin(angle) * radius, Mathf.Cos(angle) * radius, 0f);
         return offset * aimCamera.transform.forward;                       // 相机局部小角度旋转后的方向
+    }
+
+    // 【新增】当前"腰射基础散布"：蹲下按武器倍率收紧（开镜不受影响）
+    private float HipBaseSpread(WeaponData weapon)
+    {
+        if (weapon == null) return 0f;
+        float s = weapon.hipSpread;
+        if (playerMotor != null && playerMotor.IsCrouched) s *= weapon.crouchSpreadScale;
+        return s;
     }
 
     // 【新增，1.7d】散布恢复：每帧朝"当前状态的基础散布"收敛
@@ -244,7 +270,7 @@ public class WeaponController : NetworkBehaviour
         // 腰射 + 刚开过火（sprayHoldTime 秒内）→ 暂停恢复，让散布一路累积（越打越散）
         if (!IsAiming && Time.time - lastFireTime < sprayHoldTime) return;
 
-        float baseSpread = IsAiming ? weapon.aimSpread : weapon.hipSpread;
+        float baseSpread = IsAiming ? weapon.aimSpread : HipBaseSpread(weapon);
         currentSpread = Mathf.MoveTowards(currentSpread, baseSpread, weapon.spreadRecover * Time.deltaTime);
     }
 
@@ -291,8 +317,13 @@ public class WeaponController : NetworkBehaviour
         if (canAimNow == IsAiming) return;      // 状态没变：什么都不做
 
         IsAiming = canAimNow;
-        if (IsAiming && CurrentWeapon != null)
-            currentSpread = Mathf.Min(currentSpread, CurrentWeapon.aimSpread);   // 开镜瞬间直接收紧散布
+        if (CurrentWeapon != null)
+        {
+            if (IsAiming)
+                currentSpread = Mathf.Min(currentSpread, CurrentWeapon.aimSpread);   // 开镜瞬间直接收紧散布
+            else
+                currentSpread = Mathf.Max(currentSpread, HipBaseSpread(CurrentWeapon));   // 【修复】关镜瞬间直接恢复腰射基础散布（关镜后第一枪也有散布；蹲下按倍率收紧）
+        }
 
         OnAimChanged?.Invoke(IsAiming);         // 广播：枪模/FOV/准星/灵敏度都在听
     }
@@ -343,15 +374,25 @@ public class WeaponController : NetworkBehaviour
         weaponIndex = currentIndex;
         WeaponData weapon = weapons[weaponIndex];
 
-        // 射速校验（防连发宏）：服务器自己记冷却；0.02 秒容差避免正常连发被误拒
-        if (Time.time < serverNextFireTime - 0.02f) return;
-        serverNextFireTime = Time.time + 1f / weapon.fireRate;
+        // 射速校验（防连发宏）：按时间累积额度，够 1 点才放行（0.02 秒容差避免正常连发被误拒）
+        float fireInterval = 1f / weapon.fireRate;
+        fireCredit = Mathf.Min(maxFireCredit, fireCredit + (Time.time - lastFireCreditTime + 0.02f) / fireInterval);
+        lastFireCreditTime = Time.time;
+        if (fireCredit < 1f)
+        {
+            if (debugLogAmmo) Debug.Log("[武器] 服务器拒绝了一发：超过射速额度（防连发宏）");
+            return;
+        }
+        fireCredit -= 1f;
 
         // 【阶段2.3-A】弹药 / 换弹校验（服务器权威）：打空枪、换弹中开枪的违规请求直接拒绝
         if (isReloading) return;
         if (magAmmo[weaponIndex] <= 0) return;
         magAmmo[weaponIndex]--;                // 服务器扣弹
         PublishCurrentAmmo();                  // 同步给各端（本机 HUD 也刷新）
+
+        // 【2.5-音效B】到这里说明射速/弹药校验全部通过 → 广播"开火表现"（远程玩家的 3D 枪声）
+        if (NetworkServer.active) RpcFireFeedback();
 
         if (!PickValidHit(origin, direction, weapon, out RaycastHit hit)) return;
 
@@ -387,6 +428,17 @@ public class WeaponController : NetworkBehaviour
     private void RpcYouKilled(Health victim)
     {
         OnKilled?.Invoke(victim);   // 加击杀数 / 播"你 击杀了 X"
+    }
+
+    // 【2.5-音效B】开火表现广播：让其他端听到/看到"有人在开火"（远程 3D 枪声）
+    // - 服务器在（射速/弹药）校验通过后发出 → 违规请求不会出声/出火光
+    // - 开枪者自己那一端跳过：本机开火链已经播过 2D 枪声（WeaponFeedback），避免叠加
+    // - 复用 OnFired 事件：以后给远程加枪口火光等表现也挂同一条线
+    [ClientRpc]
+    private void RpcFireFeedback()
+    {
+        if (NetUtil.IsLocalControl(this)) return;   // 自己的那一端：本地链路已经播过
+        OnFired?.Invoke();
     }
 
     // ② 本机表现：命中反馈（准星闪红 / 弹孔火花）——只在开枪者本机跑，不走网络
@@ -481,7 +533,8 @@ public class WeaponController : NetworkBehaviour
 
         CancelReload();                                  // 切枪打断换弹（否则换弹会隔着武器"偷偷完成"）
         currentIndex = index;                            // 走 SyncVar → 各端 HookWeaponIndexChanged
-        serverNextFireTime = Time.time;                  // 服务器侧同样放开射速冷却
+        fireCredit = Mathf.Max(fireCredit, 1f);          // 服务器侧同样放开射速冷却（和客户端 nextFireTime = 现在 对齐）
+        lastFireCreditTime = Time.time;
         OnWeaponChanged?.Invoke(currentIndex, CurrentWeapon);   // 权威侧显式补发
         PublishCurrentAmmo();                            // 新枪弹药同步 + 本机事件
     }

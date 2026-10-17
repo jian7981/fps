@@ -28,10 +28,11 @@ MonoBehaviour:
   hipSpread: 3.5
   spreadPerShot: 2.5
   maxSpread: 8
-  spreadRecover: 0
+  spreadRecover: 5
   aimSpread: 0
+  crouchSpreadScale: 0.6
   recoilPitch: 1.2
   recoilYawRandom: 0.3
-  recoilRecover: 8
+  recoilRecover: 0
   aimRecoilPitch: 0.6
   aimRecoilYawRandom: 0.15

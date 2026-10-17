@@ -8,7 +8,7 @@ public class JoinRoomDialogUI : MonoBehaviour
 {
     [Header("引用")]
     public GameObject dialog;          // 弹窗根物体（激活时显示）
-    public TMP_InputField ipInput;     // IP 输入框（留空 = localhost）
+    public TMP_InputField ipInput;     // 输入框：可填 IP[:端口]，也可填 4 位房间码（自动识别）
     public Button confirmButton;       // 确定：发起连接
     public Button cancelButton;        // 取消：关闭弹窗
     public LobbyManager lobbyManager;  // 连接逻辑（大厅里那个）
@@ -43,11 +43,22 @@ public class JoinRoomDialogUI : MonoBehaviour
         dialog.SetActive(false);
     }
 
+    // 确定：输入框里既能填地址、也能填房间码 —— 自动识别
+    //   含 "." 或 ":" → 当成 IP[:端口] 直连（保持原来的用法）
+    //   其它           → 当成房间码，去登记服务查地址后连接
     private void OnConfirm()
     {
-        string ip = (ipInput != null) ? ipInput.text : "";
+        string text = (ipInput != null) ? ipInput.text.Trim() : "";
         Hide();
-        if (lobbyManager != null) lobbyManager.JoinRoom(ip);
-        else Debug.LogWarning("[大厅] 加入房间失败：lobbyManager 未挂载");
+
+        if (lobbyManager == null)
+        {
+            Debug.LogWarning("[大厅] 加入房间失败：lobbyManager 未挂载");
+            return;
+        }
+
+        if (text.Length == 0) lobbyManager.JoinRoom("");                                   // 留空 = localhost
+        else if (text.Contains(".") || text.Contains(":")) lobbyManager.JoinRoom(text);     // 地址直连
+        else lobbyManager.JoinRoomByCode(text);                                            // 房间码
     }
 }

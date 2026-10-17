@@ -324,11 +324,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   muzzleEffects:
-  - {fileID: 6619470878373806158}
-  - {fileID: 2897071998198690993}
+  - {fileID: 4000011227296186, guid: 9defeac88977c0d448aa4541073ee9e4, type: 3}
+  - {fileID: 4000011227296186, guid: 9defeac88977c0d448aa4541073ee9e4, type: 3}
   fireSounds:
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 8300000, guid: b3a1b0f854d515b4798e653179fdaea9, type: 3}
+  - {fileID: 8300000, guid: c5d5a6ea1c8c89343a5a43945f7bf1bf, type: 3}
+  reloadStartSound: {fileID: 8300000, guid: 5eb06b5e7e9d0ae408b348ee6de52f1b, type: 3}
+  reloadEndSound: {fileID: 8300000, guid: b0d8c8961182aa34abc6f4221b489a65, type: 3}
+  fireVolume: 0.319
+  reloadVolume: 0.348
   audioSource: {fileID: 0}
   stopAfterFireDelay: 0.15
 --- !u!114 &6616719169097304139
@@ -345,6 +349,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   bulletHolePrefab: {fileID: 8587451261464370476, guid: 2eb6312ced64be74586227fb107bb126,
     type: 3}
+  impactSound: {fileID: 0}
+  impactVolume: 1
   holeLifetime: 20
   maxHoles: 40
 --- !u!114 &8235043494377493982
@@ -359,10 +365,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b4e9134018959346816a62f26feed09, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  hitSmokePrefab: {fileID: 6463494585732157636, guid: 1b09f56a53503734b80f5e23732d22fc,
+  hitSmokePrefab: {fileID: 733209293663125264, guid: fcd27e9b64f619746991b41c831fd719,
     type: 3}
+  hitSound: {fileID: 8300000, guid: 8cfc67226e59dc649b0afdf0911e0caf, type: 3}
+  hitVolume: 1
   effectLifetime: 0.3
   spawnOffset: 0.05
+  maxEffects: 20
 --- !u!1 &1989302091788611495
 GameObject:
   m_ObjectHideFlags: 0
@@ -3179,6 +3188,22 @@ PrefabInstance:
         type: 3}
       insertIndex: -1
       addedObject: {fileID: 4344357666106450429}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8851c84ea91108f469f2b8545ad61a74,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7599405538601343051}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8851c84ea91108f469f2b8545ad61a74,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4833925305773740214}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8851c84ea91108f469f2b8545ad61a74,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 261825312776532462}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 8851c84ea91108f469f2b8545ad61a74,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: -7657937658816017281}
   m_SourcePrefab: {fileID: 100100000, guid: 8851c84ea91108f469f2b8545ad61a74, type: 3}
 --- !u!4 &849525872655315937 stripped
 Transform:
@@ -3243,6 +3268,7 @@ MonoBehaviour:
   cam: {fileID: 2511548590922825263}
   mouseSensitivity: 200
   maxLookAngle: 65
+  maxRecoilOffset: 60
 --- !u!114 &5865653289589884802
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3262,12 +3288,18 @@ MonoBehaviour:
   moveSpeed: 5
   sprintSpeed: 9
   gravity: -18
-  jumpHeight: 1.2
+  jumpHeight: 1.4
   animator: {fileID: 8729350500960120947}
   speedParameter: Speed
   animDamp: 10
   groundedParameter: isGrounded
   jumpingParameter: jumping
+  crouchKey: 306
+  crouchHeight: 1.2
+  crouchSpeedScale: 0.5
+  crouchLerpSpeed: 4
+  crouchParameter: isCrouched
+  camT: {fileID: 0}
 --- !u!114 &8256529911924270231
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3287,7 +3319,7 @@ MonoBehaviour:
   maxHp: 100
   maxArmor: 50
   armorAbsorbRatio: 0.6
-  allowFriendlyFire: 1
+  allowFriendlyFire: 0
   autoRespawn: 1
   respawnDelay: 3
   respawnPoint: {fileID: 0}
@@ -3320,6 +3352,7 @@ MonoBehaviour:
   wallCheckDistance: 0.7
   blockFireThreshold: 0.35
   wallLowerSpeed: 8
+  maxFireCredit: 5
 --- !u!114 &7437265715543196181
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3452,6 +3485,103 @@ MonoBehaviour:
   syncMode: 0
   syncInterval: 0
   wantsNextRound: 0
+--- !u!114 &7599405538601343051
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2634357841306497203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0bd98126ec4cd0d408996fac029a24d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  handBone: {fileID: 3601713551220175402}
+  gunPrefabs:
+  - {fileID: 1487774384131766, guid: ee329c3cd08e58645834d20702d7f6c6, type: 3}
+  - {fileID: 1829597508155286, guid: 7359baf27e84aa44cafac3788c8be0f1, type: 3}
+  holdLocalPositions:
+  - {x: -0.078, y: 0.192, z: 0.012}
+  - {x: -0.062, y: 0.213, z: 0.006}
+  holdLocalEulers:
+  - {x: 80.893, y: -33.374, z: 54.22}
+  - {x: 87.258, y: -55.447, z: 34.333}
+  holdLocalScales:
+  - {x: 1.25, y: 1.25, z: 1.25}
+  - {x: 0.8, y: 0.8, z: 0.8}
+  fallbackIndex: 0
+  wallAdjustEnabled: 1
+  wallCheckDistance: 1.1
+  fullLowerDistance: 0.4
+  wallLowerAngle: 75
+  wallLowerOffset: {x: 0, y: -0.5, z: -0.25}
+  wallLowerSpeed: 8
+--- !u!114 &4833925305773740214
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2634357841306497203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fcdd42b493db4974287d65052d169ee1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  mode: 0
+  modelRoot: {fileID: 0}
+  manualYaw: 45
+  logResult: 0
+  debugLiveFacing: 0
+  liveCheckInterval: 3
+--- !u!114 &261825312776532462
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2634357841306497203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e8de1f19b0021074eb3f2162ce8f6b57, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  shotSounds:
+  - {fileID: 8300000, guid: d0209041c6e11a74290de1942b828184, type: 3}
+  - {fileID: 8300000, guid: 8376343b0f09a1b4abff16786fc17d3f, type: 3}
+  sourceLocalOffset: {x: 0, y: 1.4, z: 0.2}
+  minDistance: 3
+  maxDistance: 80
+  volume: 1
+  pitchRandom: 0.06
+--- !u!114 &-7657937658816017281
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2634357841306497203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9e424dce845aa514883e6e472ea70b01, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  stepSounds:
+  - {fileID: 8300000, guid: 01afcefc116500d40ac1622a09f04b0d, type: 3}
+  stepDistance: 2.4
+  minStepInterval: 0.2
+  minMoveSpeed: 0.8
+  walkSpeed: 1.5
+  runSpeed: 5
+  walkVolume: 0.5
+  runVolume: 1
+  ownVolumeScale: 0.786
+  otherVolumeScale: 1
+  minDistance: 2
+  maxDistance: 40
+  pitchRandom: 0.08
+  teleportDistance: 2
 --- !u!4 &3268097988365901197 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 366175167995203695, guid: 8851c84ea91108f469f2b8545ad61a74,
@@ -3461,6 +3591,12 @@ Transform:
 --- !u!4 &3442103422275742217 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 8851c84ea91108f469f2b8545ad61a74,
+    type: 3}
+  m_PrefabInstance: {fileID: 2904390399619206626}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &3601713551220175402 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1852576806548013000, guid: 8851c84ea91108f469f2b8545ad61a74,
     type: 3}
   m_PrefabInstance: {fileID: 2904390399619206626}
   m_PrefabAsset: {fileID: 0}

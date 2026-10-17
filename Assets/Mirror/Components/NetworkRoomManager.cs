@@ -73,6 +73,17 @@ namespace Mirror
         [ReadOnly, Tooltip("List of Room Player objects")]
         [System.NonSerialized] public HashSet<NetworkRoomPlayer> roomSlots = new HashSet<NetworkRoomPlayer>();
 
+        /// <summary>
+        /// 【本项目改动 · 2026-10-15】headless（无头）运行时，房间里最后一名玩家离开后要不要自动停服。
+        /// <para>上游默认行为是停服（随后走 offlineScene，靠 auto-start 重开）。</para>
+        /// <para>本项目默认 <b>false</b>：云机上的房间是"预先开好的房间池"（一进程一房间），
+        /// 房间进程必须常驻 —— 空房要退回"可创建"状态，不能被停服，否则进程虽还活着但服务器已关闭、
+        /// 房间码失效，而且不会自己恢复（Mirror 的 auto-start 只在启动时跑一次）。</para>
+        /// <para>该开关只在 headless 下参与判断：带窗口运行（Windows 现状）行为完全不受影响。</para>
+        /// </summary>
+        [Tooltip("headless 下房间空了是否自动停服。本项目（房间池模型）保持关闭。")]
+        public bool stopServerWhenEmptyInHeadless = false;
+
         public bool allPlayersReady
         {
             get => _allPlayersReady;
@@ -251,9 +262,11 @@ namespace Mirror
             OnRoomServerDisconnect(conn);
             base.OnServerDisconnect(conn);
 
-            // Restart the server if we're headless and no players are connected.
+            // Upstream: restart the server if we're headless and no players are connected.
             // This will send server to offline scene, where auto-start will run.
-            if (Utils.IsHeadless() && numPlayers < 1)
+            // 【本项目改动】加了 stopServerWhenEmptyInHeadless 开关（默认关）—— 见该字段的注释：
+            // 房间池模型要求房间进程常驻，不能停服。
+            if (Utils.IsHeadless() && numPlayers < 1 && stopServerWhenEmptyInHeadless)
                 StopServer();
         }
 
