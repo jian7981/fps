@@ -36,3 +36,8 @@ MonoBehaviour:
   recoilRecover: 0
   aimRecoilPitch: 0.6
   aimRecoilYawRandom: 0.15
+  fireSound: {fileID: 8300000, guid: c5d5a6ea1c8c89343a5a43945f7bf1bf, type: 3}
+  fireVolume: 2
+  reloadStartSound: {fileID: 8300000, guid: b0d8c8961182aa34abc6f4221b489a65, type: 3}
+  reloadEndSound: {fileID: 8300000, guid: d88085430c41eed4c8cb50f6acc95547, type: 3}
+  reloadVolume: 1

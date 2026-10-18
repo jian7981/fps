@@ -11,8 +11,10 @@ using Mirror;   // NetworkBehaviour
 // 挂载：角色预制体根物体（Player.prefab / Bot.prefab）；槽位顺序和武器列表一致（0=步枪，1=狙击）
 public class RemoteGunAudio : MonoBehaviour
 {
-    [Header("枪声（顺序必须和 WeaponController 的 Weapons 数组一致；留空静默）")]
-    [SerializeField] private AudioClip[] shotSounds;   // 0=步枪，1=狙击
+    // 【阶段4-A3 改动】枪声素材与音量已搬进 WeaponData；这里只留一个"兜底武器资产"给没有 WeaponController 的角色
+    [Header("兜底武器数据（给没有 WeaponController 的角色用：Bot）")]
+    [Tooltip("Bot 没有 WeaponController → 拿不到武器数据，就用它当枪声来源。拖一个 WeaponData 资产进来即可（比如步枪的）")]
+    [SerializeField] private WeaponData fallbackWeapon;
 
     [Header("3D 音源")]
     [Tooltip("音源相对角色根的位置（角色根在脚下，1.4 ≈ 枪口高度）")]
@@ -72,10 +74,15 @@ public class RemoteGunAudio : MonoBehaviour
     // 对外：直接播一声（BotController.FireAt 用它；index = 枪声槽下标，Bot 固定 0）
     public void PlayShot(int index)
     {
-        if (source == null || shotSounds == null || index < 0 || index >= shotSounds.Length) return;
-        AudioClip clip = shotSounds[index];
-        if (clip == null) return;
+        if (source == null) return;
+
+        // 【阶段4-A3】音效从 WeaponData 取：有 WeaponController → 按"开火的那把枪"取下标；
+        //   没有（Bot）→ 用兜底资产。素材/音量都在资产里，0 或留空 = 静默
+        WeaponData weapon = (weapons != null) ? weapons.GetWeapon(index) : fallbackWeapon;
+        if (weapon == null || weapon.fireSound == null) return;
+        if (weapon.fireVolume <= 0f) return;
+
         source.pitch = 1f + Random.Range(-pitchRandom, pitchRandom);   // 每发轻微变调，连发更自然
-        source.PlayOneShot(clip);
+        source.PlayOneShot(weapon.fireSound, weapon.fireVolume);       // 最终音量 = source.volume × fireVolume
     }
 }

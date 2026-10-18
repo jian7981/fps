@@ -1381,17 +1381,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   handBone: {fileID: 3601713551220175402}
   gunPrefabs:
-  - {fileID: 1487774384131766, guid: ee329c3cd08e58645834d20702d7f6c6, type: 3}
-  - {fileID: 1829597508155286, guid: 7359baf27e84aa44cafac3788c8be0f1, type: 3}
+  - {fileID: 1848168734957225167, guid: c0f2a5a66c428d14880108fe2ca9fa9a, type: 3}
+  - {fileID: 6429436167168011512, guid: bc251583182876041ab6120efe50fc67, type: 3}
   holdLocalPositions:
-  - {x: -0.078, y: 0.192, z: 0.012}
-  - {x: -0.062, y: 0.213, z: 0.006}
+  - {x: -0.0997, y: 0.149, z: 0.011}
+  - {x: -0.071, y: 0.151, z: 0.02}
   holdLocalEulers:
-  - {x: 80.893, y: -33.374, z: 54.22}
-  - {x: 87.258, y: -55.447, z: 34.333}
+  - {x: -95.286, y: 357.188, z: -271.706}
+  - {x: -87.373, y: -184.557, z: -75.931}
   holdLocalScales:
-  - {x: 1.25, y: 1.25, z: 1.25}
-  - {x: 0.8, y: 0.8, z: 0.8}
+  - {x: 1, y: 1, z: 1}
+  - {x: 1, y: 1, z: 1}
   fallbackIndex: 0
   wallAdjustEnabled: 1
   wallCheckDistance: 1.1
@@ -1399,6 +1399,7 @@ MonoBehaviour:
   wallLowerAngle: 75
   wallLowerOffset: {x: -0.1, y: -0.25, z: -0.12}
   wallLowerSpeed: 8
+  freezePoseForTuning: 0
 --- !u!114 &4186140939714328777
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1429,8 +1430,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e8de1f19b0021074eb3f2162ce8f6b57, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  shotSounds:
-  - {fileID: 8300000, guid: d0209041c6e11a74290de1942b828184, type: 3}
+  fallbackWeapon: {fileID: 0}
   sourceLocalOffset: {x: 0, y: 1.4, z: 0.2}
   minDistance: 3
   maxDistance: 80
@@ -1448,7 +1448,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9e424dce845aa514883e6e472ea70b01, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  stepSounds: []
+  stepSounds:
+  - {fileID: 8300000, guid: ca15ad96f8c2b3640909a22b28580b57, type: 3}
+  - {fileID: 8300000, guid: 1b9123f42d7000344af3b96d404500b0, type: 3}
+  - {fileID: 8300000, guid: aa6479453687eb54b965116f4f52b2ec, type: 3}
+  - {fileID: 8300000, guid: f30607b44957cdb439481edbb854182b, type: 3}
+  - {fileID: 8300000, guid: 97184db0c705f2d469ce5521d0555dcf, type: 3}
   stepDistance: 2.4
   minStepInterval: 0.2
   minMoveSpeed: 0.8

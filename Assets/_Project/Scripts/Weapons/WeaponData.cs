@@ -53,4 +53,18 @@ public class WeaponData : ScriptableObject
     public float recoilRecover = 10f;          // 视角恢复速度（度/秒，腰射/开镜共用）
     public float aimRecoilPitch = 0.2f;        // 【新增】开镜-垂直：想有"开镜后坐力"就调大它
     public float aimRecoilYawRandom = 0.08f;   // 【新增】开镜-水平：开镜时左右随机 ±多少度
+
+    // ============== 【阶段4-A3】音效：一把枪的"听感"也在这里配 ==============
+    // 为什么放这里：做新枪时数据全在这一个资产里（伤害/射速/散布/后坐力/音效），
+    // 不用再去相机上的 WeaponFeedback / RemoteGunAudio 里"按武器下标"数着格子填
+    [Header("音效（本机自己的枪声 与 别人听到的枪声 都用这一份）")]
+    public AudioClip fireSound;                // 开火音（留空 = 这把枪静默）
+    [Tooltip("1 = 原始音量；**可以大于 1 来突破上限**（Unity 允许 volumeScale > 1，但 >1 会削波，建议 1~2）。0 = 静音")]
+    public float fireVolume = 1f;
+
+    [Header("音效 · 换弹（弹匣拔出 / 插入 各一个；留空静默）")]
+    public AudioClip reloadStartSound;
+    public AudioClip reloadEndSound;
+    [Tooltip("同样可以大于 1（突破上限）；0 = 静音")]
+    public float reloadVolume = 1f;
 }

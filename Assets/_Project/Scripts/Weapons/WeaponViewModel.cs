@@ -79,17 +79,27 @@ public class WeaponViewModel : MonoBehaviour
         //    表现层只负责按这个值把枪压低（下面乘 (1-aimLerp)：开镜时压低自动淡出）
         float wallAmount = (weaponController != null) ? weaponController.WallAmount : 0f;
 
-        // 4. 取当前枪的开镜偏移：步枪=配置/内置默认；狙击=0（不位移，直接切镜筒）
-        Vector3 aimPos = GetAimPosition(currentIndex);
-        Vector3 aimRot = GetAimRotation(currentIndex);
-
-        // 5. 最终姿态 = 原始姿态 + 后坐力偏移 + 开镜偏移 + 贴墙压低
-        //    （贴墙压低乘以 (1-aimLerp)：开镜时压低自动淡出，不会和瞄准姿态打架）
+        // 4. 累加所有"姿态层" → 得到这一帧的枪模姿态
+        //    【阶段4-C 改动】以前是一句多层相乘的表达式（`wallLowerOffset * wallAmount * (1f - aimLerp)` 这种），
+        //    现在写成"每层提供偏移 + 权重"，数值结果与改动前完全一样；
+        //    好处：以后加"低姿持枪 / 冲刺收枪 / 受击抖动"只是再加一行 AddLayer
         Transform gun = gunModels[currentIndex];
-        gun.localPosition = originPositions[currentIndex] + positionOffset
-                            + aimPos * aimLerp
-                            + wallLowerOffset * wallAmount * (1f - aimLerp);
-        gun.localRotation = originRotations[currentIndex] * Quaternion.Euler(rotationOffset + aimRot * aimLerp);
+        Vector3 layerPos = Vector3.zero;
+        Vector3 layerRot = Vector3.zero;
+
+        // ① 后坐力层：开火瞬间赋值、每帧往 0 回弹
+        AddLayer(ref layerPos, ref layerRot, positionOffset, rotationOffset, 1f);
+
+        // ② 开镜层：权 = 开镜进度（狙击的偏移是 0，它靠"隐藏枪模 + 切镜筒"表现）
+        AddLayer(ref layerPos, ref layerRot,
+                 GetAimPosition(currentIndex), GetAimRotation(currentIndex), aimLerp);
+
+        // ③ 贴墙压低层：权 = 贴墙程度 ×(1 − 开镜进度) → 开镜时自动淡出，不和瞄准姿态打架
+        AddLayer(ref layerPos, ref layerRot, wallLowerOffset, Vector3.zero, wallAmount * (1f - aimLerp));
+
+        // 最终姿态 = 原始姿态 + 各层之和
+        gun.localPosition = originPositions[currentIndex] + layerPos;
+        gun.localRotation = originRotations[currentIndex] * Quaternion.Euler(layerRot);
 
         // 6. 相机 FOV：开镜缩小视野（画面放大 = 倍率），收镜回到默认
         if (viewCamera != null)
@@ -103,6 +113,15 @@ public class WeaponViewModel : MonoBehaviour
         // 7. 狙击开镜：枪模直接隐藏 —— 画面整块交给镜筒 UI（"只有瞄准镜"的效果）
         bool shouldShowGun = !(wantAim && IsCurrentSniper());
         if (gun.gameObject.activeSelf != shouldShowGun) gun.gameObject.SetActive(shouldShowGun);
+    }
+
+    // 【阶段4-C】姿态层累加：每层只提供"偏移 + 权重"，权重由各自负责算
+    //   于是"开镜时贴墙压低自动淡出"这类互斥关系直接写在权重里，不用再手写多层相乘的表达式
+    private static void AddLayer(ref Vector3 pos, ref Vector3 rot, Vector3 layerPos, Vector3 layerRot, float weight)
+    {
+        if (weight <= 0f) return;
+        pos += layerPos * weight;
+        rot += layerRot * weight;
     }
 
     // 【1.7d】当前武器是不是狙击枪（决定开镜表现走哪套模板）

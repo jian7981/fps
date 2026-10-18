@@ -16,16 +16,10 @@ public class WeaponFeedback : MonoBehaviour
     [Header("枪口火光（顺序必须和 WeaponController 的 Weapons 数组一致）")]
     [SerializeField] private Transform[] muzzleEffects;   // 每把枪的枪口火光实例（0=步枪，1=狙击）
 
-    [Header("开火音效（顺序同上；还没配素材的格子留空即可）")]
-    [SerializeField] private AudioClip[] fireSounds;
-
-    [Header("换弹音效（开始 / 完成各一个；留空静默）")]
-    [SerializeField] private AudioClip reloadStartSound;
-    [SerializeField] private AudioClip reloadEndSound;
-
-    [Header("音量（调试用：直接在 Inspector 里调大小）")]
-    [Range(0f, 1f)] [SerializeField] private float fireVolume = 1f;     // 开火音
-    [Range(0f, 1f)] [SerializeField] private float reloadVolume = 1f;   // 换弹音（开始/完成共用）
+    // 【阶段4-A3 改动】开火 / 换弹的**素材与音量全部搬进 WeaponData 资产**（一把枪 = 一个资产，音效在里面调）
+    //   → 这里不再有 fireSounds / fireVolumes / reloadStartSound / reloadEndSound / reloadVolume
+    //   枪口火光（muzzleEffects）**没搬**：它引用的是"场景里枪上的实例"、且按实例缓存粒子系统，
+    //   要数据化得先改成"按枪口运行时实例化预制体" —— 属于另一个改动
 
     [Header("音源（留空 = 自动获取，没有就自动加一个）")]
     [SerializeField] private AudioSource audioSource;
@@ -123,7 +117,7 @@ public class WeaponFeedback : MonoBehaviour
     private void HandleFired()
     {
         PlayMuzzle(currentIndex);
-        PlaySound(currentIndex);
+        PlaySound(weaponController != null ? weaponController.CurrentWeapon : null);   // 【阶段4-A3】音效来自武器资产
         lastFireTime = Time.time;   // 记录开火时刻，停火后用它判断何时清尾
     }
 
@@ -163,23 +157,35 @@ public class WeaponFeedback : MonoBehaviour
         }
     }
 
-    // 播开火音效（没配素材就静默跳过，不报错）
-    private void PlaySound(int index)
+    // 播开火音效：素材与音量都来自**当前武器的 WeaponData**（没配 / 0 → 静默跳过，不报错）
+    private void PlaySound(WeaponData weapon)
     {
-        if (fireSounds == null || index < 0 || index >= fireSounds.Length) return;
-        AudioClip clip = fireSounds[index];
-        if (clip == null) return;              // 空槽跳过
-        audioSource.PlayOneShot(clip, fireVolume);   // 【修复】音量按次传，不动音源总音量（防干扰共用音源的其他音效）
+        if (weapon == null || weapon.fireSound == null) return;
+        if (weapon.fireVolume <= 0f) return;
+
+        // 音量按次传，不动音源总音量（防干扰共用音源的其他音效）
+        //   这里可以直接传 > 1：Unity 只把负数钳到 0，不封顶（代价是可能削波）
+        audioSource.PlayOneShot(weapon.fireSound, weapon.fireVolume);
     }
 
-    // 换弹开始 / 完成：各播一个音（没配就静默）
-    private void HandleReloadStart(float duration) { PlayClip(reloadStartSound, reloadVolume); }
-    private void HandleReloadEnd() { PlayClip(reloadEndSound, reloadVolume); }
+    // 换弹开始 / 完成：音效同样来自当前武器的 WeaponData（没配就静默）
+    private void HandleReloadStart(float duration)
+    {
+        WeaponData w = (weaponController != null) ? weaponController.CurrentWeapon : null;
+        if (w != null) PlayClip(w.reloadStartSound, w.reloadVolume);
+    }
 
-    // 播一个 2D 音效（空引用静默跳过；音量按次传，不动音源总音量）
+    private void HandleReloadEnd()
+    {
+        WeaponData w = (weaponController != null) ? weaponController.CurrentWeapon : null;
+        if (w != null) PlayClip(w.reloadEndSound, w.reloadVolume);
+    }
+
+    // 播一个 2D 音效（空引用 / 音量为 0 静默跳过；音量按次传，不动音源总音量）
     private void PlayClip(AudioClip clip, float vol)
     {
         if (clip == null || audioSource == null) return;
+        if (vol <= 0f) return;
         audioSource.PlayOneShot(clip, vol);
     }
 }

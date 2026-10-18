@@ -20,7 +20,7 @@ using UnityEngine;
 public class ThirdPersonWeapon : MonoBehaviour
 {
     [Header("挂点")]
-    [Tooltip("右手骨骼（展开角色模型 → 骨骼树里的右手，拖进来）")]
+    [Tooltip("右手骨骼。**留空 = 自动按 Humanoid 语义取**（HumanBodyBones.RightHand）→ 以后换角色模型不用再手拖骨骼")]
     [SerializeField] private Transform handBone;
 
     [Header("枪预制体（顺序必须和 WeaponController 的武器列表一致）")]
@@ -51,6 +51,11 @@ public class ThirdPersonWeapon : MonoBehaviour
     [Tooltip("压低/回正的过渡速度（越大越干脆）")]
     [SerializeField] private float wallLowerSpeed = 8f;
 
+    [Header("调试")]
+    [Tooltip("调握持姿态用：勾上后本脚本不再每帧重设枪的姿态 → 可以在 Play 模式里直接拖枪物体自由摆位（拖的不会被顶回去）。" +
+             "摆好后把枪的 localPosition / localRotation(欧拉角) / localScale 抄进上面三个数组，再取消勾选即可立刻验证")]
+    [SerializeField] private bool freezePoseForTuning = false;
+
     private WeaponController weapons;
     private Health health;
     private GameObject currentGun;      // 当前挂在手上的枪副本
@@ -61,6 +66,24 @@ public class ThirdPersonWeapon : MonoBehaviour
     {
         weapons = GetComponent<WeaponController>();
         health = GetComponent<Health>();
+        ResolveHandBone();   // 【阶段4-C】右手骨骼留空 → 自动按 Humanoid 语义解析
+    }
+
+    // 【阶段4-C】右手骨骼：留空就自动从 Animator 取 HumanBodyBones.RightHand
+    //   为什么这样更稳：骨骼引用从"手拖某个模型的骨骼实例"变成"按 Humanoid 语义查" ——
+    //   换角色模型（只要是 Humanoid）不用再回来重拖一次（与 ModelFacingCorrector 的取法一致）
+    //   public：以后做"运行时换角色/换装"时，换完模型调一次它就能重新挂到新骨骼上
+    public void ResolveHandBone()
+    {
+        if (handBone != null) return;   // 手拖了就用你拖的（允许覆盖）
+
+        Animator anim = GetComponentInChildren<Animator>(true);
+        if (anim != null && anim.avatar != null && anim.isHuman)
+            handBone = anim.GetBoneTransform(HumanBodyBones.RightHand);
+
+        if (handBone == null)
+            Debug.LogWarning("[第三人称武器] 找不到右手骨骼：模型里没有 Animator，或它不是 Humanoid " +
+                             "→ 请在 Inspector 里手拖 handBone", this);
     }
 
     private void OnEnable()
@@ -134,6 +157,10 @@ public class ThirdPersonWeapon : MonoBehaviour
     {
         if (currentGun == null || handBone == null) return;
 
+        // 【调试】调握持姿态期间整段跳过：不再重设枪的姿态（否则你在 Play 里拖枪会被下一帧顶回去）。
+        // 代价是贴墙压低也一起跳过 —— 正好方便看清"干净"的握持姿态；调完记得取消勾选。
+        if (freezePoseForTuning) return;
+
         UpdateWallAmount();   // 每帧检测：手附近有没有墙（平滑逼近 0~1）
 
         // 枪是 GameObject，操作姿态要走 .transform
@@ -157,36 +184,19 @@ public class ThirdPersonWeapon : MonoBehaviour
         }
     }
 
-    // 【贴墙避让】贴墙程度检测：手的位置朝 正前/右前45°/左前45° 三条短射线，取最贴近的
-    // （和第一人称 WeaponController.UpdateWallLower 同一套做法，区别只是从手出发）
+    // 【贴墙避让】贴墙程度检测：从手部骨骼朝 正前/右前45°/左前45° 三条短射线
+    // 【阶段4-C 改动】三向射线 + "命中角色不算墙"的判定抽到 Shared/WallProbe，与第一人称共用同一套实现
+    //   （原来两边各写了一份一模一样的；现在的区别只剩"起点"：第一人称从相机、第三人称从手）
     private void UpdateWallAmount()
     {
         float target = 0f;
 
         // 死了不检测（枪已收起）；关掉开关就永远保持 0（不压低）
-        if (wallAdjustEnabled && !(health != null && health.IsDead))
-        {
-            Vector3 origin = handBone.position;
-            Vector3 forward = transform.forward;
-            Vector3 right = transform.right;
-
-            float front = WallCheck(origin, forward);
-            float rightFront = WallCheck(origin, (forward + right).normalized);
-            float leftFront = WallCheck(origin, (forward - right).normalized);
-            target = Mathf.Max(front, Mathf.Max(rightFront, leftFront));   // 哪个方向更贴近用哪个
-        }
+        if (wallAdjustEnabled && !(health != null && health.IsDead) && handBone != null)
+            target = WallProbe.Probe(handBone.position, transform.forward, transform.right,
+                                     wallCheckDistance, fullLowerDistance);
 
         wallAmount = Mathf.MoveTowards(wallAmount, target, wallLowerSpeed * Time.deltaTime);
-    }
-
-    // 单条射线：命中墙返回"贴近程度"（越近越接近 1）；没东西 / 命中的是角色（自己或别人）→ 0
-    private float WallCheck(Vector3 origin, Vector3 direction)
-    {
-        if (!Physics.Raycast(origin, direction, out RaycastHit hit, wallCheckDistance, ~0, QueryTriggerInteraction.Ignore))
-            return 0f;    // 这个方向没东西（触发器被 Ignore）
-        if (hit.collider.GetComponentInParent<Health>() != null)
-            return 0f;    // 命中的是角色（含移动胶囊/部位）→ 不算墙
-        return Mathf.InverseLerp(wallCheckDistance, fullLowerDistance, hit.distance);   // 越近越接近 1
     }
 
     // 死亡：收起手上的枪（尸体不握枪，观感更正常）

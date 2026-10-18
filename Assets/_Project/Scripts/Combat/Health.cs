@@ -57,6 +57,9 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
     public event Action<int, GameObject> OnDamaged;   // (伤害量, 攻击者) —— 联机下只在服务器触发（计分用）
     public event Action OnHealthChanged;              // 血量/护甲变了：HUD 收到后自己来读最新数值
     public event Action<GameObject> OnDied;           // 死亡广播：(击杀者)。客户端收到的 killer 为 null（动画/镜头/UI 都不用它）
+    // 【阶段4-B2】受击方向：参数 = 攻击者的世界坐标。只在"被打的那个人自己的机器"上触发
+    //   （服务器用 TargetRpc 定向发给他）；纯单机直接本地触发。HUD 用它算"子弹从哪个方向来"
+    public event Action<Vector3> OnDamageFrom;
     public event Action OnRespawned;                  // 复活完成时广播
 
     private Coroutine respawnCoroutine;
@@ -130,11 +133,42 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
 
         OnDamaged?.Invoke(damage, attacker);     // 服务器侧事件（计分用）
 
+        NotifyDamageFrom(attacker);              // 【阶段4-B2】受击方向（只发给挨打的本人）
+
         // 【修复，2.2-A】Mirror 只在 host 模式赋值时才自动调 hook（单机/服务器不会）
         // → 权威侧显式补一次（host 模式会重复一次，订阅方都是幂等操作，无影响）
         OnHealthChanged?.Invoke();
 
         if (currentHp <= 0) Die(attacker);       // 血量归零 → 死亡流程
+    }
+
+    // ================= 【阶段4-B2】受击方向 =================
+    // 为什么不能直接用 OnDamaged：那是"服务器侧"事件（TakeDamage 开头就 return 掉了客户端），
+    // 它的用途是计分。而"从哪个方向挨打"只有**挨打的那个人自己**需要知道，所以走 TargetRpc 定向发给他。
+    // 纯单机没有网络会话 → 直接本地触发（和 NotifyKilledToShooter 同款写法，单机路径行为不变）。
+    private void NotifyDamageFrom(GameObject attacker)
+    {
+        if (attacker == null || attacker == gameObject) return;   // 环境伤害 / 自杀 → 没有"方向"可言
+
+        Vector3 sourcePos = attacker.transform.position;
+
+        if (NetworkServer.active || NetworkClient.active)
+        {
+            // 只有"有主人的角色"（玩家）才发：服务器上的 Bot 没有 owner，
+            // 对它调 TargetRpc 会被 Mirror 报 "no connection"，所以先判一次
+            if (netIdentity != null && netIdentity.connectionToClient != null) RpcDamageFrom(sourcePos);
+        }
+        else
+        {
+            OnDamageFrom?.Invoke(sourcePos);
+        }
+    }
+
+    // TargetRpc：在服务器调用、"这个角色的主人"那台机器上执行
+    [TargetRpc]
+    private void RpcDamageFrom(Vector3 sourceWorldPos)
+    {
+        OnDamageFrom?.Invoke(sourceWorldPos);
     }
 
     private void Die(GameObject killer)

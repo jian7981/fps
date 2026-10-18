@@ -37,6 +37,14 @@ public class WeaponController : NetworkBehaviour
 
     // ---------- 对外只读状态（HUD 以后读这些）----------
     public WeaponData CurrentWeapon => (weapons != null && weapons.Length > 0) ? weapons[currentIndex] : null;
+
+    // 【阶段4-A3】按下标取武器数据（越界 / 没配 → null）
+    // 用途：远端枪声要按"开火的那一把"取音效；远端玩家对象上的 WeaponController 副本与主机是同一套资产
+    public WeaponData GetWeapon(int index)
+    {
+        if (weapons == null || index < 0 || index >= weapons.Length) return null;
+        return weapons[index];
+    }
     public int CurrentMag => currentMag;                // 【改，2.3-A】读同步值（服务器回写）
     public int CurrentReserve => currentReserve;        // 【改，2.3-A】读同步值（服务器回写）
     public bool IsReloading => isReloading;             // 【改，2.3-A】属性 → [SyncVar] 字段
@@ -277,34 +285,20 @@ public class WeaponController : NetworkBehaviour
     // 【新增，1.8b】贴墙收枪检测：相机正前方 + 右前方 45° + 【2.5】左前方 45° 三条短射线
     // （枪在右下角，正前/右前最容易被挡；左前补上后，贴左墙横移也不会穿模）
     // 一份数据管两件事：① 枪模压低（表现层读 WallAmount）② 收枪中禁止开火（IsWeaponBlocked）
+    // 【阶段4-C 改动】三向射线的具体实现抽到 Shared/WallProbe（与第三人称共用一套）——
+    //   传"完全贴住距离 = 0" 等价于原来的 Clamp01(1 - 距离 / wallCheckDistance)
     private void UpdateWallLower()
     {
         float target = 0f;
         if (aimCamera != null)
-        {
-            float front = WallCheck(aimCamera.transform.forward);   // 正前方
-            Vector3 rightDiagonal = (aimCamera.transform.forward + aimCamera.transform.right).normalized;
-            float rightFront = WallCheck(rightDiagonal);            // 右前方 45°
-            Vector3 leftDiagonal = (aimCamera.transform.forward - aimCamera.transform.right).normalized;
-            float leftFront = WallCheck(leftDiagonal);              // 【2.5】左前方 45°
-            target = Mathf.Max(front, Mathf.Max(rightFront, leftFront));   // 哪个方向更贴近用哪个
-        }
+            target = WallProbe.Probe(aimCamera.transform.position,
+                                     aimCamera.transform.forward, aimCamera.transform.right,
+                                     wallCheckDistance, 0f);
 
         WallAmount = Mathf.MoveTowards(WallAmount, target, wallLowerSpeed * Time.deltaTime);
 
         // 收枪超过阈值 → 禁止开火；开镜时枪已抬到画面中央，不受此限制
         IsWeaponBlocked = !IsAiming && WallAmount >= blockFireThreshold;
-    }
-
-    // 单条射线：命中墙返回"贴近程度"（越近越接近 1）；没东西 / 命中的是自己身上的部位 → 0
-    private float WallCheck(Vector3 direction)
-    {
-        Vector3 origin = aimCamera.transform.position;
-        if (!Physics.Raycast(origin, direction, out RaycastHit hit, wallCheckDistance, ~0, QueryTriggerInteraction.Ignore))
-            return 0f;    // 这个方向上没东西（触发器被 Ignore，部位碰撞体不会误判）
-        if (hit.collider.GetComponentInParent<Health>() != null)
-            return 0f;    // 命中的是角色（自己或敌人，含其移动胶囊/部位）→ 不算墙
-        return Mathf.Clamp01(1f - hit.distance / wallCheckDistance);   // 越近越接近 1
     }
 
     // 【新增，1.7d】开镜状态切换（唯一入口：输入/切枪/死亡/狙击收镜都走它，状态永远不会乱）
