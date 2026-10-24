@@ -35,7 +35,9 @@ public class WeaponData : ScriptableObject
 
     [Header("开镜（ADS）")]
     public bool canAim = true;                 // 这把枪能不能开镜
-    public float aimFOV = 45f;                 // 开镜后的相机视野角：越小倍率越大（狙击填 12 左右）
+    [Tooltip("开镜的视野角档位（度）：越小倍率越大。索引 0 = 第一档（倍率最小）。\n" +
+             "填多个档位 = 开镜时可以用滚轮切倍率（狙击填两档，比如 12 / 6）；只填一个 = 这把枪只有一档")]
+    public float[] zoomFOVs = { 45f };         // 【阶段4-D2】由"单值 aimFOV"改成档位数组（多倍率）
     public float aimSpeed = 12f;               // 开镜/收镜过渡速度（越大切得越快）
     public float aimSensitivityScale = 0.5f;   // 开镜时鼠标灵敏度的倍率（越小越稳，便于瞄准）
 
@@ -46,6 +48,10 @@ public class WeaponData : ScriptableObject
     public float spreadRecover = 4f;           // 每秒恢复多少度（视觉上=准星收紧速度）
     public float aimSpread = 0.05f;            // 开镜时的散布（接近 0 = 指哪打哪）
     public float crouchSpreadScale = 0.6f;     // 【新增】蹲下时的腰射散布倍率（0.6 = 蹲下散布只有站着的六成；1 = 蹲下不影响）
+    [Tooltip("蹲下时「每发增加多少散布」的倍率（0.6 = 只有站着的六成增长速度；1 = 蹲下不影响增长速度）")]
+    public float crouchSpreadPerShotScale = 0.6f;
+    [Tooltip("蹲下时「散布上限」的倍率（0.6 = 蹲下最多只散到站着的六成；1 = 蹲下不影响上限）")]
+    public float crouchMaxSpreadScale = 0.6f;
 
     [Header("镜头后坐力（开火时视角上跳）")]
     public float recoilPitch = 0.35f;          // 腰射-垂直：每发视角上跳多少度（主分量）
@@ -67,4 +73,14 @@ public class WeaponData : ScriptableObject
     public AudioClip reloadEndSound;
     [Tooltip("同样可以大于 1（突破上限）；0 = 静音")]
     public float reloadVolume = 1f;
+
+    // 【阶段4-D2】开镜倍率档位数（至少 1；数组为空也算 1 档）
+    public int ZoomLevelCount => (zoomFOVs != null && zoomFOVs.Length > 0) ? zoomFOVs.Length : 1;
+
+    // 【阶段4-D2】取某一档的开镜 FOV：越界自动夹到最近一档（数组为空 → 兜底 45）
+    public float GetAimFOV(int level)
+    {
+        if (zoomFOVs == null || zoomFOVs.Length == 0) return 45f;
+        return zoomFOVs[Mathf.Clamp(level, 0, zoomFOVs.Length - 1)];
+    }
 }

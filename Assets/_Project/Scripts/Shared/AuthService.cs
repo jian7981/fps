@@ -39,6 +39,36 @@ public static class AuthService
     public static ProfileInfo CachedProfile { get; private set; }
     public static bool IsLoggedIn => !string.IsNullOrEmpty(CurrentToken);
 
+    /// <summary>
+    /// 【阶段4-G】当前头像编号（0 = 默认头像）。
+    /// 还没拉到档案（刚启动、档案还在路上）时返回 0 —— 宁可先显示默认头像，也不要空引用。
+    /// </summary>
+    public static int CurrentAvatarId => (CachedProfile != null) ? CachedProfile.avatarId : 0;
+
+    /// <summary>
+    /// 【阶段4-H】升到下一级需要的经验（经验条的分母）**由后端下发**（ProfileInfo.expToNext）。
+    /// <para>为什么要删掉原来这里的 <c>level * 100</c> 公式：等级曲线改成三段式后
+    /// （Lv1~9 每级 400 / Lv10~29 每级 800 / Lv30+ 每级 1200），客户端再自己算一份
+    /// 就一定会和后端各说各话 —— 表现为"经验条显示快满了，实际还差很远"。
+    /// 现在唯一实现只在后端 Progression.cs 的 LevelCurve 里。</para>
+    /// </summary>
+    public static int ExpToNextOf(ProfileInfo info)
+        => (info != null && info.expToNext > 0) ? info.expToNext : 1;
+
+    /// <summary>
+    /// 【阶段4-H】对局结算：服务器把经验下发到本机后，直接改本地缓存并广播。
+    /// <para>为什么本地改而不是再拉一次档案：结算面板弹出来的瞬间就要显示新等级/新经验，
+    /// 再走一次网络往返会慢一拍；而且服务器发来的就是最终结果，本地照抄即可。</para>
+    /// </summary>
+    public static void ApplyMatchReward(int level, int exp, int expToNext)
+    {
+        if (CachedProfile == null) return;
+        CachedProfile.level = Mathf.Max(1, level);
+        CachedProfile.exp = Mathf.Max(0, exp);
+        CachedProfile.expToNext = (expToNext > 0) ? expToNext : 1;
+        OnProfileChanged?.Invoke();
+    }
+
     // 房间进程（服务端）上报战绩用的密钥
     public static string ReportKey { get; private set; } = DefaultReportKey;
 
@@ -159,6 +189,66 @@ public static class AuthService
                 ClearToken();
                 onResult?.Invoke("自动登录失败：" + err);
             });
+    }
+
+    // ==================== 头像（【阶段4-G】）====================
+
+    // 改头像：只存编号（0 = 默认头像）。
+    // 成功后**本地立刻改掉并广播**，不必再拉一次档案 —— 主菜单卡片 / 个人主页 / 房间玩家框
+    // 全都订阅 OnProfileChanged 自动重画，所以这里一广播各处就同步了。
+    public static IEnumerator SetAvatar(int avatarId, Action<int> onSuccess = null, Action<string> onFail = null)
+    {
+        EnsureInit();
+        if (!IsLoggedIn)
+        {
+            onFail?.Invoke("尚未登录");
+            yield break;
+        }
+
+        yield return PostJson("/api/profile/avatar",
+            JsonUtility.ToJson(new AvatarRequest { avatarId = avatarId }), CurrentToken, "",
+            text =>
+            {
+                AvatarResult result = Parse<AvatarResult>(text);
+                if (result == null || !result.ok)
+                {
+                    onFail?.Invoke("返回内容无法解析");
+                    return;
+                }
+                if (CachedProfile != null) CachedProfile.avatarId = result.avatarId;
+                OnProfileChanged?.Invoke();
+                onSuccess?.Invoke(result.avatarId);
+            },
+            onFail);
+    }
+
+    // ==================== 历史战绩（【阶段4-G】）====================
+
+    // 拉本账号的最近对局。数据源是后端 match_report_log（一人一局一行，本来是为"上报幂等"建的）。
+    // limit 会被后端夹在 1~50 之间（客户端说了不算数，也就是"别指望靠它把整张表拉下来"）。
+    public static IEnumerator GetMatchHistory(int limit, Action<MatchRecord[]> onSuccess,
+                                              Action<string> onFail = null)
+    {
+        EnsureInit();
+        if (!IsLoggedIn)
+        {
+            onFail?.Invoke("尚未登录");
+            yield break;
+        }
+
+        int n = Mathf.Clamp(limit, 1, 50);
+        yield return GetJson("/api/matches?limit=" + n, CurrentToken,
+            text =>
+            {
+                MatchHistoryResult result = Parse<MatchHistoryResult>(text);
+                if (result == null)
+                {
+                    onFail?.Invoke("返回内容无法解析");
+                    return;
+                }
+                onSuccess?.Invoke(result.matches ?? new MatchRecord[0]);
+            },
+            onFail);
     }
 
     // ==================== 战绩上报（服务端用）====================
@@ -323,6 +413,44 @@ public class ProfileInfo
     public int kills;
     public int deaths;
     public int assists;
+    public int avatarId;   // 【阶段4-G】预设头像编号（0 = 默认）
+    public int expToNext;  // 【阶段4-H】升到下一级还差多少（后端 LevelCurve 唯一给值）
+}
+
+// 【阶段4-G】改头像的请求 / 响应（字段名必须和后端 JSON 一致）
+[Serializable]
+public class AvatarRequest
+{
+    public int avatarId;
+}
+
+[Serializable]
+public class AvatarResult
+{
+    public bool ok;
+    public int avatarId;
+}
+
+// 【阶段4-G】历史战绩的一条。reportedAt 是 ISO 8601 的 **UTC** 时间串（后端特意带上了 Z 后缀），
+// 显示前要自己 ToLocalTime() 转成本机时间 —— 玩家看到的一定得是他那边的时间。
+[Serializable]
+public class MatchRecord
+{
+    public string matchId;
+    public int teamId;
+    public int kills;
+    public int deaths;
+    public int assists;
+    public bool won;
+    public string reportedAt;
+    public int expGain;    // 【阶段4-H】那一局实际入账的经验（老对局没有流水 = 0 → 不显示）
+}
+
+// JsonUtility **解析不了"根就是数组"的 JSON**，所以后端把列表包了一层 {"matches":[...]}
+[Serializable]
+public class MatchHistoryResult
+{
+    public MatchRecord[] matches;
 }
 
 [Serializable]
@@ -345,6 +473,15 @@ public class MatchStatsResult
     public bool leveledUp;
     public int level;
     public int exp;
+    // 【阶段4-H】结算明细（字段名必须和后端 JSON 一致）
+    public int expToNext;     // 升到下一级还要多少
+    public int levelBefore;   // 结算前的等级（升了几级 = level - levelBefore）
+    public int baseExp;       // 参与保底
+    public int killExp;
+    public int assistExp;
+    public int winExp;
+    public int dailyExp;      // 每日首胜
+    public bool capped;       // 是否撞到单局 300 上限
 }
 
 [Serializable]

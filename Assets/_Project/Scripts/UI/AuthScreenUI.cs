@@ -75,6 +75,18 @@ public class AuthScreenUI : MonoBehaviour
 
     public void Hide() => screen.SetActive(false);
 
+    // 【新增，4-F】给设置面板的「退出登录」按钮用的入口：**登出 + 回到登录/注册界面**
+    //   和原来主菜单那个「账号」按钮的区别：那个只是"打开界面"（已登录时看到的是资料 + 进入游戏）；
+    //   这个语义明确成"退出登录" —— 点完必然落到未登录区，必须重新登录才会回到已登录区
+    public void LogoutAndShow()
+    {
+        if (!AuthService.HasService) return;             // 没配 -lobbyserver：账号功能整体关闭
+
+        OnLogoutClicked();                               // 清掉本地令牌（登出）
+        if (lobbyUI != null) lobbyUI.HideAllPanels();    // 大厅面板让位（含设置面板），避免叠在登录界面上
+        Show();                                          // RefreshState 会把界面切到"未登录区"
+    }
+
     // ==================== 操作 ====================
 
     private void OnLoginClicked()

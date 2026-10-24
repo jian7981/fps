@@ -22,7 +22,8 @@ MonoBehaviour:
   reloadTime: 2
   autoReloadWhenEmpty: 1
   canAim: 1
-  aimFOV: 45
+  zoomFOVs:
+  - 45
   aimSpeed: 12
   aimSensitivityScale: 0.6
   hipSpread: 1.5

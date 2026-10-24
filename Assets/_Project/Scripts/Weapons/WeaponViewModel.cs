@@ -59,7 +59,22 @@ public class WeaponViewModel : MonoBehaviour
             originPositions[i] = gunModels[i].localPosition;
             originRotations[i] = gunModels[i].localRotation;
         }
+
+        // 【阶段4-D3】第一人称 view model 不投影：手臂/枪离相机太近，影子落在近处地面 / 墙上很出戏。
+        //   ⚠ 只处理**第一人称 view model** —— 第三人称那把"世界枪"是真实手持物体，影子要保留
+        //   （它在角色根物体下、不在 gunModels 里，所以不会被这里碰到）
+        for (int i = 0; i < count; i++)
+        {
+            if (gunModels[i] == null) continue;
+            var renderers = gunModels[i].GetComponentsInChildren<Renderer>(true);
+            for (int r = 0; r < renderers.Length; r++)
+                renderers[r].shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
     }
+
+    // 【阶段4-D2】当前武器对应的 view model 根（给 WeaponViewModelAnimator 找 Animator 用）
+    public Transform CurrentViewModel =>
+        (gunModels != null && currentIndex >= 0 && currentIndex < gunModels.Length) ? gunModels[currentIndex] : null;
 
     private void Update()
     {
@@ -106,7 +121,7 @@ public class WeaponViewModel : MonoBehaviour
         {
             float targetFOV = defaultFOV;
             if (wantAim && weaponController != null && weaponController.CurrentWeapon != null)
-                targetFOV = weaponController.CurrentWeapon.aimFOV;
+                targetFOV = weaponController.CurrentWeapon.GetAimFOV(weaponController.ZoomLevel);   // 【阶段4-D2】按当前倍率档位取 FOV
             viewCamera.fieldOfView = Mathf.MoveTowards(viewCamera.fieldOfView, targetFOV, fovChangeSpeed * Time.deltaTime);
         }
 

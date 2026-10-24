@@ -1,4 +1,4 @@
-﻿using System;                       // [Serializable]
+﻿﻿using System;                       // [Serializable]
 using UnityEngine;
 using UnityEngine.UI;               // Button
 using TMPro;                        // TMP_Text
@@ -18,6 +18,7 @@ public class RoomPanelUI : MonoBehaviour
     public class RoomSlotUI
     {
         public Button button;        // 槽位本体（可点击）
+        public Image avatarImage;    // 【阶段4-G】这个位置玩家的头像（可留空 → 只是没有头像框）
         public TMP_Text nameText;    // 玩家名 / "空位"
         public TMP_Text stateText;   // "已准备 / 未准备 / 点我换到这里"
     }
@@ -26,6 +27,7 @@ public class RoomPanelUI : MonoBehaviour
     public GameObject roomPanel;      // 面板根物体
     public LobbyUI lobbyUI;           // 进出房间时切换大厅面板显隐
     public RoomSlotUI[] slots;        // 10 个槽位：0~4 = A队1~5号位，5~9 = B队1~5号位
+    public AvatarLibrary avatarLibrary;   // 【阶段4-G】预设头像库（把各人头像显示到槽位上）
     public TMP_Text playersText;      // 提示语（人数/准备情况/下一步做什么）
     public TMP_Text roomCodeText;     // 【阶段3-房间码】显示本机房间码（发给朋友即可加入）
     public Button readyButton;        // 准备/取消准备
@@ -131,12 +133,23 @@ public class RoomPanelUI : MonoBehaviour
                         slot.nameText.text = shownName;
                     }
                     if (slot.stateText != null) slot.stateText.text = occupant.readyToBegin ? "已准备" : "未准备";
+
+                    // 【阶段4-G】头像：编号由 RoomPlayer 同步过来（0 = 默认头像）。
+                    // 头像库没配 / 这个编号没图 → 藏掉这个 Image，不留空白方块
+                    if (slot.avatarImage != null)
+                    {
+                        Sprite avatar = (avatarLibrary != null) ? avatarLibrary.Get(occupant.avatarId) : null;
+                        slot.avatarImage.sprite = avatar;
+                        slot.avatarImage.enabled = (avatar != null);
+                    }
+
                     slot.button.interactable = false;   // 有人的位置不响应点击（交换请求以后再做）
                 }
                 else
                 {
                     if (slot.nameText != null) slot.nameText.text = "空位";
                     if (slot.stateText != null) slot.stateText.text = "点我换到这里";
+                    if (slot.avatarImage != null) slot.avatarImage.enabled = false;   // 空位没有头像
                     slot.button.interactable = (myRoomPlayer != null);   // 空位都能点（跨队换位）
                 }
             }

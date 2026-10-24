@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 
 // 按队伍给角色上色：0 = A队(蓝)，1 = B队(红)
 // 【阶段2 注意】每个客户端只给自己/服务器权威设置；本地玩家用 isLocalPlayer 判断

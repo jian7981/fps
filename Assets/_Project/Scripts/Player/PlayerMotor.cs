@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 using Mirror;   // 【阶段2.1】NetworkBehaviour
 
 [RequireComponent(typeof(CharacterController))]
@@ -9,6 +9,10 @@ public class PlayerMotor : NetworkBehaviour
     public float sprintSpeed = 9f; // 冲刺速度
     public float gravity = -18f;
     public float jumpHeight = 1.4f;
+
+    [Header("开火减速")]
+    [Tooltip("正在开火时的移动速度倍率（0.5 = 慢一半）。1 = 不减速")]
+    [SerializeField] private float firingSpeedScale = 0.5f;
 
 
 
@@ -54,6 +58,9 @@ public class PlayerMotor : NetworkBehaviour
     private bool lastSentGrounded = true;        // 上次上报的地面状态（防止等待回显期间每帧重复上报）
     private bool lastSentJumping;
 
+    // 【新增，4-D5】开火减速：开火时移动变慢。引用取不到 = Bot（没有 WeaponController）→ 不减速
+    private WeaponController weapon;
+
     // 【新增】对外只读：是不是蹲着（WeaponController 用它算"蹲下收紧散布"）
     public bool IsCrouched => crouched;
 
@@ -61,6 +68,7 @@ public class PlayerMotor : NetworkBehaviour
     {
         controller = GetComponent<CharacterController>();
         health = GetComponent<Health>(); // 取不到也不影响（下面都判空了）
+        weapon = GetComponent<WeaponController>();   // 【新增，4-D5】Bot 没有 → 取不到，不减速
         if (animator == null) animator = GetComponentInChildren<Animator>();   // 改成 InChildren，往下找
         prevPos = transform.position;   // 初始化，避免第一帧出现巨大位移
 
@@ -263,10 +271,12 @@ public class PlayerMotor : NetworkBehaviour
     }
 
     // 【新增】当前移动速度：蹲下时用走路速度×倍率（蹲下不能冲刺）
+    // 【4-D5】再加"开火减速"：正在开火时整体再乘 firingSpeedScale（蹲下 / 冲刺状态都会一起变慢）
     float CrouchAwareSpeed()
     {
-        if (crouched) return moveSpeed * crouchSpeedScale;
-        return isSprint ? sprintSpeed : moveSpeed;
+        float speed = crouched ? moveSpeed * crouchSpeedScale : (isSprint ? sprintSpeed : moveSpeed);
+        if (weapon != null && weapon.IsFiring) speed *= firingSpeedScale;
+        return speed;
     }
 
     // ================= 【新增】跳跃状态同步（远端玩家的跳跃动画） =================

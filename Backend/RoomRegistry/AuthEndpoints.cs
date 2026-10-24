@@ -1,8 +1,7 @@
 using MySqlConnector;
 
 // ==================== 账号接口 ====================
-// 注册 / 登录 / 登出 / 查档案。
-//
+// 注册 / 登录 / 登出 / 查档案 / 改头像。
 // 约定（和房间登记接口保持一致）：
 //   - 返回 camelCase JSON（Unity 的 JsonUtility 只认小写字段名）
 //   - 错误统一 {"error":"中文原因"}，客户端可以原样显示给玩家
@@ -10,6 +9,10 @@ static class AuthEndpoints
 {
     // 请求头里带 "Authorization: Bearer <token>"
     private const string BearerPrefix = "Bearer ";
+
+    // 【阶段4-G】预设头像编号上限（0 = 默认头像，所以数量是 MaxAvatarId + 1 个）
+    // ⚠ 改了这里必须同步 Unity 侧 AvatarLibrary 资产里的 Sprite 数量，否则选了编号超范围的头像会被拒
+    public const int MaxAvatarId = 11;
 
     public static void Map(WebApplication app)
     {
@@ -20,6 +23,7 @@ static class AuthEndpoints
         app.MapPost("/api/auth/login", LoginAsync);
         app.MapPost("/api/auth/logout", (Delegate)LogoutAsync);
         app.MapGet("/api/profile", (Delegate)ProfileAsync);
+        app.MapPost("/api/profile/avatar", (Delegate)SetAvatarAsync);   // 【阶段4-G】改头像
     }
 
     // ==================== 注册 ====================
@@ -60,6 +64,14 @@ static class AuthEndpoints
 
             // 战绩表先给一行默认值：之后对局结束只做 UPDATE 累加，不必判"行在不在"
             await using (var cmd = new MySqlCommand("INSERT INTO player_stats (user_id) VALUES (@u)", conn))
+            {
+                cmd.Parameters.AddWithValue("@u", userId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // 【阶段4-G】展示资料同样先给一行默认值（avatar_id = 0 = 默认头像）：
+            // 这样"改头像"永远只做 UPDATE，不用每次判行在不在
+            await using (var cmd = new MySqlCommand("INSERT INTO player_profile (user_id) VALUES (@u)", conn))
             {
                 cmd.Parameters.AddWithValue("@u", userId);
                 await cmd.ExecuteNonQueryAsync();
@@ -152,18 +164,61 @@ static class AuthEndpoints
             await using var conn = await Db.OpenAsync();
             await using var cmd = new MySqlCommand(
                 @"SELECT u.id, u.username, u.nickname,
-                         s.level, s.exp, s.matches, s.wins, s.kills, s.deaths, s.assists
-                  FROM users u JOIN player_stats s ON s.user_id = u.id
+                         s.level, s.exp, s.matches, s.wins, s.kills, s.deaths, s.assists,
+                         COALESCE(p.avatar_id, 0)
+                  FROM users u
+                  JOIN player_stats s ON s.user_id = u.id
+                  LEFT JOIN player_profile p ON p.user_id = u.id
                   WHERE u.id = @u", conn);
             cmd.Parameters.AddWithValue("@u", userId);
 
             await using var reader = await cmd.ExecuteReaderAsync();
             if (!await reader.ReadAsync()) return Bad("账号不存在", 404);
 
+            // 头像用 LEFT JOIN + COALESCE：**在这个表存在之前就注册的老账号**没有那一行，
+            // 这里给 0（默认头像），绝不能因此让整个档案接口挂掉
+            int level = reader.GetInt32(3);
             return Results.Ok(new ProfileResponse(
                 reader.GetInt64(0), reader.GetString(1), reader.GetString(2),
-                reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
-                reader.GetInt32(6), reader.GetInt32(7), reader.GetInt32(8), reader.GetInt32(9)));
+                level, reader.GetInt32(4), reader.GetInt32(5),
+                reader.GetInt32(6), reader.GetInt32(7), reader.GetInt32(8), reader.GetInt32(9),
+                reader.GetInt32(10),
+                // 【阶段4-H】经验条分母由后端给：曲线只存在于 Progression.cs 一处，
+                // 客户端不再自己写一份 level*100（否则一改曲线就两边对不上）
+                LevelCurve.Need(level)));
+        }
+        catch (Exception ex) { return ServiceUnavailable(ex); }
+    }
+
+    // ==================== 改头像（【阶段4-G】）====================
+
+    // 只改**自己**的头像。编号由客户端自报、服务器只做范围校验 ——
+    // 头像不参与任何战斗判定，被伪造也只是改到自己头上，不值得为它加一层签名校验。
+    static async Task<IResult> SetAvatarAsync(HttpContext ctx, AvatarRequest req)
+    {
+        try
+        {
+            string token = BearerToken(ctx);
+            (long userId, byte status) = await Db.ResolveTokenAsync(token);
+            if (userId == 0) return Bad("登录已失效，请重新登录", 401);
+            if (status != 0) return Bad("账号已被封禁", 403);
+
+            if (req.AvatarId < 0 || req.AvatarId > MaxAvatarId)
+                return Bad($"头像编号超出范围（0~{MaxAvatarId}）");
+
+            await using var conn = await Db.OpenAsync();
+            // 用 INSERT ... ON DUPLICATE KEY UPDATE 而不是纯 UPDATE：
+            // 万一这行因为历史原因不存在（表是后加的），一次就能补上，不必先查再判断
+            await using (var cmd = new MySqlCommand(
+                @"INSERT INTO player_profile (user_id, avatar_id) VALUES (@u, @a)
+                  ON DUPLICATE KEY UPDATE avatar_id = @a", conn))
+            {
+                cmd.Parameters.AddWithValue("@u", userId);
+                cmd.Parameters.AddWithValue("@a", req.AvatarId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            return Results.Ok(new AvatarResponse(true, req.AvatarId));
         }
         catch (Exception ex) { return ServiceUnavailable(ex); }
     }
@@ -203,6 +258,9 @@ record RegisterRequest(string? Username, string? Password, string? Nickname);
 record LoginRequest(string? Username, string? Password);
 record AuthResponse(string Token, long UserId, string Username, string Nickname, string ExpiresAt);
 record ProfileResponse(long UserId, string Username, string Nickname,
-                       int Level, int Exp, int Matches, int Wins, int Kills, int Deaths, int Assists);
+                       int Level, int Exp, int Matches, int Wins, int Kills, int Deaths, int Assists,
+                       int AvatarId, int ExpToNext);
+record AvatarRequest(int AvatarId);
+record AvatarResponse(bool Ok, int AvatarId);
 record OkResponse(bool Ok);
 record ApiError(string Error);

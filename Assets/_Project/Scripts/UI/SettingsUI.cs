@@ -15,6 +15,12 @@ public class SettingsUI : MonoBehaviour
     public TextMeshProUGUI volumeValueText;        // 音量数值文字（比如 "80%"）
     public Button backButton;                      // 【返回】按钮
 
+    [Header("【阶段4-F】账号（没配 -lobbyserver 时自动隐藏这个按钮）")]
+    [Tooltip("「退出登录」按钮（放在设置面板里）。留空 = 不做这个功能")]
+    public Button logoutButton;
+    [Tooltip("账号界面（挂在大厅 Canvas 上的 AuthScreenUI）。点「退出登录」后用它切到登录 / 注册界面")]
+    public AuthScreenUI authScreen;
+
     [Header("【新功能】开镜灵敏度（滑条不拖也能用，没做的先留空）")]
     public Slider rifleScopeSlider;                     // 步枪开镜灵敏度滑条
     public TextMeshProUGUI rifleScopeValueText;         // 数值文字（可选）
@@ -60,6 +66,36 @@ public class SettingsUI : MonoBehaviour
         if (rifleScopeSlider != null) rifleScopeSlider.onValueChanged.AddListener(OnRifleScopeChanged);
         if (sniperScopeSlider != null) sniperScopeSlider.onValueChanged.AddListener(OnSniperScopeChanged);
         backButton.onClick.AddListener(OnBackClicked);
+
+        // 【阶段4-F】设置面板里的「退出登录」
+        if (logoutButton != null) logoutButton.onClick.AddListener(OnLogoutClicked);
+        RefreshLogoutButton();   // 按钮显隐按登录态初始化（每次打开面板都会再刷一次，见 OnEnable）
+    }
+
+    // 【新增，4-F】每次打开设置面板都刷一次「退出登录」的显隐
+    //（登录态可能在面板关着的时候变了：比如刚在登录界面登出 / 换了账号）
+    private void OnEnable()
+    {
+        RefreshLogoutButton();
+    }
+
+    // 【新增，4-F】「退出登录」：登出 + 切到登录 / 注册界面（必须重新登录才回得到已登录区）
+    //   主菜单上原来那个「账号」按钮就是挪到了这里，「设置」里语义也更明确
+    private void OnLogoutClicked()
+    {
+        if (authScreen == null)
+        {
+            Debug.LogWarning("SettingsUI：authScreen 未赋值 → 点「退出登录」无法切到登录界面", this);
+            return;
+        }
+        authScreen.LogoutAndShow();
+    }
+
+    // 只在"开了账号服务 且 已登录"时显示这个按钮（否则没东西可退，也避免没配服务时留个死按钮）
+    private void RefreshLogoutButton()
+    {
+        if (logoutButton == null) return;
+        logoutButton.gameObject.SetActive(AuthService.HasService && AuthService.IsLoggedIn);
     }
 
     // 灵敏度滑条变化：写进设置（先只在内存），并刷新数字
@@ -125,6 +161,8 @@ public class SettingsUI : MonoBehaviour
         if (volumeSlider == null) { Debug.LogError("SettingsUI：volumeSlider 未赋值"); return false; }
         if (volumeValueText == null) { Debug.LogError("SettingsUI：volumeValueText 未赋值"); return false; }
         if (backButton == null) { Debug.LogError("SettingsUI：backButton 未赋值"); return false; }
+        if (logoutButton != null && authScreen == null)
+            Debug.LogWarning("SettingsUI：logoutButton 已赋值但 authScreen 为空 → 点「退出登录」不会切界面");
         return true;
     }
 }

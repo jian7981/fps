@@ -62,6 +62,13 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
     public event Action<Vector3> OnDamageFrom;
     public event Action OnRespawned;                  // 复活完成时广播
 
+    // 【阶段4-H】对局经验结算（只在本机玩家的机器上触发）
+    public event Action<MatchReward> OnMatchReward;         // 服务器下发结算结果
+    public event Action<string> OnMatchRewardFailed;        // 上报失败（后端不可达/令牌过期…）
+    // 结算结果可能在结算面板订阅之前就到了（HTTP 往返通常比 0.1 秒的结束广播慢，
+    // 但网络极快时可能反过来）→ UI 订阅时先看这里有没有现成的
+    public MatchReward LastMatchReward { get; private set; }
+
     private Coroutine respawnCoroutine;
 
     private void Awake()
@@ -169,6 +176,47 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
     private void RpcDamageFrom(Vector3 sourceWorldPos)
     {
         OnDamageFrom?.Invoke(sourceWorldPos);
+    }
+
+    // ================= 【阶段4-H】对局经验结算下发 =================
+    // 服务器把这一局的经验结果发给"这个角色本人"那台机器（由 MatchRules 在上报成功后调用）。
+    // 为什么用 TargetRpc 而不是 SyncVar：
+    //   · 经验/等级是**私有信息**，其他玩家不需要知道（也省得同步别人的经验条）
+    //   · 这是一次性事件，不是需要持续同步的状态
+    [TargetRpc]
+    public void TargetShowMatchReward(int expGain, bool duplicated, int levelBefore, int levelAfter,
+                                      int exp, int expToNext, int baseExp, int killExp,
+                                      int assistExp, int winExp, int dailyExp, bool capped)
+    {
+        LastMatchReward = new MatchReward
+        {
+            expGain = expGain,
+            duplicated = duplicated,
+            levelBefore = levelBefore,
+            levelAfter = levelAfter,
+            exp = exp,
+            expToNext = expToNext,
+            baseExp = baseExp,
+            killExp = killExp,
+            assistExp = assistExp,
+            winExp = winExp,
+            dailyExp = dailyExp,
+            capped = capped
+        };
+
+        // 本地缓存立刻跟上（回大厅时个人卡/主页不用再等一次网络往返）：
+        // 重复上报时后端回的是"当前值"，照抄也不会写错
+        AuthService.ApplyMatchReward(levelAfter, exp, expToNext);
+
+        OnMatchReward?.Invoke(LastMatchReward);
+    }
+
+    // 上报失败（后端不可达 / 令牌过期 / 服务器密钥不一致…）：结算面板给一句明确提示，
+    // 不能让玩家看着"经验结算中…"永远转下去
+    [TargetRpc]
+    public void TargetShowMatchRewardFailed(string reason)
+    {
+        OnMatchRewardFailed?.Invoke(reason ?? "");
     }
 
     private void Die(GameObject killer)

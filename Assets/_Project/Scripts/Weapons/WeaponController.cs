@@ -35,6 +35,10 @@ public class WeaponController : NetworkBehaviour
     [SerializeField] private float blockFireThreshold = 0.35f;
     [SerializeField] private float wallLowerSpeed = 8f;   // 【新增，1.8b】收枪/回正的过渡速度（越大越干脆）
 
+    [Header("开火减速（供移动层 PlayerMotor 读取）")]
+    [Tooltip("开火后多少秒内算「正在开火」（连发时一直算）。0 = 不做这个减速")]
+    [SerializeField] private float firingSlowWindow = 0.15f;
+
     // ---------- 对外只读状态（HUD 以后读这些）----------
     public WeaponData CurrentWeapon => (weapons != null && weapons.Length > 0) ? weapons[currentIndex] : null;
 
@@ -53,6 +57,9 @@ public class WeaponController : NetworkBehaviour
     public float CurrentSpread => currentSpread;      // 【新增，1.7d】当前散布（度）——准星读它画大小
     public float WallAmount { get; private set; }     // 【新增，1.8b】贴墙收枪程度 0~1（表现层拿去做压低姿态）
     public bool IsWeaponBlocked { get; private set; } // 【新增，1.8b】收枪中（枪被墙挡住，不能开火）
+    public int ZoomLevel { get; private set; }        // 【新增，4-D2】当前开镜倍率档位（0 = 第一档；表现层用它取 FOV）
+    // 【新增，4-D5】是否"正在开火"：最近一次开火在 firingSlowWindow 秒内（移动层拿它做减速）
+    public bool IsFiring => firingSlowWindow > 0f && Time.time - lastFireTime < firingSlowWindow;
 
     // ---------- 事件：只广播，不播表现 ----------
     public event Action OnFired;                            // 开火（枪口火焰/音效/后坐力）
@@ -187,8 +194,14 @@ public class WeaponController : NetworkBehaviour
             break;   // 一帧只处理一个数字键，处理完就不再往后查
         }
 
-        float scroll = Input.GetAxis("Mouse ScrollWheel");             // 滚轮：循环切枪
-        if (scroll > 0.01f) SwitchWeapon(currentIndex - 1);
+        // 【阶段4-D2】滚轮：开镜时 = 切倍率；平时 = 循环切枪（切枪在开镜时本来就被挡着，两者不打架）
+        float scroll = Input.GetAxis("Mouse ScrollWheel");
+        if (IsAiming && CurrentWeapon != null && CurrentWeapon.ZoomLevelCount > 1
+            && Mathf.Abs(scroll) > 0.01f)
+        {
+            SetZoomLevel(ZoomLevel + (scroll > 0f ? 1 : -1));   // 滚轮上 = 倍率变大；滚轮下 = 倍率变小
+        }
+        else if (scroll > 0.01f) SwitchWeapon(currentIndex - 1);
         else if (scroll < -0.01f) SwitchWeapon(currentIndex + 1);
     }
 
@@ -215,7 +228,9 @@ public class WeaponController : NetworkBehaviour
         // 【改，1.7d】顺序很重要：先算"本发的方向"（用开枪前的散布），再增加散布
         // 【修复】每一枪都带上"当前实际散布"：基础散布任何一枪都在（见 GetSpreadDirection 的下限）；增量只让后续子弹越打越散
         Vector3 fireDirection = GetSpreadDirection();
-        currentSpread = Mathf.Min(weapon.maxSpread, currentSpread + weapon.spreadPerShot);   // 散布变大（只影响后续子弹）
+        // 【新增，4-D5】蹲下时：散布「增长更慢」+「上限更低」（两个倍率按枪配，站姿一律 1）
+        currentSpread = Mathf.Min(weapon.maxSpread * CrouchMaxSpreadScale(weapon),
+                                  currentSpread + weapon.spreadPerShot * CrouchSpreadPerShotScale(weapon));
         lastFireTime = Time.time;                                    // 记住开火时刻（连发期间暂停恢复）
 
         OnFired?.Invoke();                                           // 广播"开火了"
@@ -266,6 +281,16 @@ public class WeaponController : NetworkBehaviour
         return s;
     }
 
+    // 【新增，4-D5】蹲下时"每发增长"与"散布上限"的倍率（站姿 = 1；两个值都在 WeaponData 里按枪配）
+    private float CrouchSpreadPerShotScale(WeaponData weapon)
+    {
+        return (playerMotor != null && playerMotor.IsCrouched) ? weapon.crouchSpreadPerShotScale : 1f;
+    }
+    private float CrouchMaxSpreadScale(WeaponData weapon)
+    {
+        return (playerMotor != null && playerMotor.IsCrouched) ? weapon.crouchMaxSpreadScale : 1f;
+    }
+
     // 【新增，1.7d】散布恢复：每帧朝"当前状态的基础散布"收敛
     // 腰射连发时"暂停恢复"（重要）：否则恢复速度会吃掉每发的增长，连发永远散不起来
     //   例：射速 8 发/秒 × 每发 +0.5 度 = 每秒增长 4 度，而恢复每秒 5 度 → 散布根本升不上去
@@ -314,12 +339,25 @@ public class WeaponController : NetworkBehaviour
         if (CurrentWeapon != null)
         {
             if (IsAiming)
+            {
                 currentSpread = Mathf.Min(currentSpread, CurrentWeapon.aimSpread);   // 开镜瞬间直接收紧散布
+                ZoomLevel = 0;      // 【阶段4-D2】每次开镜都从第一档（最小倍率）开始，行为可预期
+            }
             else
                 currentSpread = Mathf.Max(currentSpread, HipBaseSpread(CurrentWeapon));   // 【修复】关镜瞬间直接恢复腰射基础散布（关镜后第一枪也有散布；蹲下按倍率收紧）
         }
 
         OnAimChanged?.Invoke(IsAiming);         // 广播：枪模/FOV/准星/灵敏度都在听
+    }
+
+    // 【阶段4-D2】切换开镜倍率档位（唯一入口）：越界自动夹到最近的档位
+    // 只负责改状态；FOV 由表现层（WeaponViewModel）每帧按 ZoomLevel 取，所以不需要额外广播
+    public void SetZoomLevel(int level)
+    {
+        int count = (CurrentWeapon != null) ? CurrentWeapon.ZoomLevelCount : 1;
+        int clamped = Mathf.Clamp(level, 0, count - 1);
+        if (clamped == ZoomLevel) return;   // 档位没变：什么都不做
+        ZoomLevel = clamped;
     }
 
     // 【修复】对局结束（结算面板弹出）时自动收镜：

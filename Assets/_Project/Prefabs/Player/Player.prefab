@@ -161,6 +161,7 @@ GameObject:
   - component: {fileID: 6616719169097304139}
   - component: {fileID: 8235043494377493982}
   - component: {fileID: 7980068006749961694}
+  - component: {fileID: 8214736484091715106}
   m_Layer: 0
   m_Name: Camera
   m_TagString: Untagged
@@ -385,6 +386,23 @@ MonoBehaviour:
   rotationAmplitude: 1.6
   maxProfiles: 12
   logShakes: 0
+--- !u!114 &8214736484091715106
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1572333272548498156}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7100e334fcc8a04e96c960706a93c0a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sprintSpeedRange: {x: 5, y: 9}
+  sprintLerpSpeed: 8
+  fireAnimationEnabled: 1
+  wallHideEnabled: 1
+  fadeDuration: 0.18
 --- !u!1 &1989302091788611495
 GameObject:
   m_ObjectHideFlags: 0
@@ -3628,6 +3646,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   teamAColor: {r: 0.25, g: 0.55, b: 1, a: 1}
   teamBColor: {r: 1, g: 0.32, b: 0.28, a: 1}
+  excludedMaterialNames:
+  - Guns Main Mat
 --- !u!114 &4705827955184249117
 MonoBehaviour:
   m_ObjectHideFlags: 0

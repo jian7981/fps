@@ -106,6 +106,67 @@ CREATE TABLE IF NOT EXISTS match_report_log (
   CONSTRAINT fk_mrl_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB COMMENT='每局每人的上报记录（幂等凭据 + 对局明细）';
 
+-- ------------------------------------------------------------
+-- 5) 玩家展示资料（头像）
+-- ------------------------------------------------------------
+-- 【阶段4-G】为什么单独一张表、而不是往 player_stats 加一列：
+--   本文件开头的全局约定第 6 条就是「新功能 = 新增表，不往现有表里堆业务列」。
+--   头像属于"外观/展示"，和 level/exp/kills 那堆"战绩"是两码事 ——
+--   以后还要往里长"装备槽 / 已解锁外观"，那时改这张表不会碰到任何战绩查询。
+--
+-- avatar_id 只存**编号**（0 = 默认头像），真正的图片在客户端 AvatarLibrary 资产里按下标取。
+-- 为什么存编号而不是图片路径/二进制：
+--   · 换美术只改客户端资产，库一行都不用动
+--   · 不用处理上传文件的存储、格式校验、敏感图审核（那是另一整块工作）
+--   · 传输只有一个 int，连对局里的房间成员同步都省事
+-- 代价：头像只能是"预设库里的那几个"。等以后真要自定义上传，再加一张 user_avatars 表存图片。
+CREATE TABLE IF NOT EXISTS player_profile (
+  user_id    BIGINT UNSIGNED NOT NULL,
+  avatar_id  INT NOT NULL DEFAULT 0 COMMENT '预设头像编号（0 = 默认）；要和客户端 AvatarLibrary 的数量对齐',
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (user_id),
+  CONSTRAINT fk_profile_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB COMMENT='玩家展示资料（头像）';
+
+-- ------------------------------------------------------------
+-- 6) 经验流水（每局每人一行）
+-- ------------------------------------------------------------
+-- 【阶段4-H】为什么单独记流水，而不是只把经验累加进 player_stats：
+--   · "这局到底给了多少经验、升没升级"是玩家会追问的信息（历史战绩里就显示 +EXP）
+--   · 以后做"经验来源分析 / 补发 / 客服核对"时，累计值根本查不出是哪一局出的问题
+--   · 复合主键 (user_id, match_id) 天然和 match_report_log 的幂等闸门同构：
+--     即使上报接口将来改逻辑，同一个 (人, 局) 也绝不会写两行流水
+CREATE TABLE IF NOT EXISTS exp_ledger (
+  user_id      BIGINT UNSIGNED NOT NULL,
+  match_id     CHAR(36)        NOT NULL COMMENT '一局对局的 UUID（服务器生成）',
+  exp_gain     INT             NOT NULL DEFAULT 0 COMMENT '本局实际入账经验（已封顶）',
+  level_before INT             NOT NULL DEFAULT 1 COMMENT '上报前的等级',
+  level_after  INT             NOT NULL DEFAULT 1 COMMENT '上报后的等级',
+  created_at   DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (user_id, match_id),
+  KEY idx_exp_ledger_time (user_id, created_at),
+  CONSTRAINT fk_exp_ledger_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB COMMENT='经验流水（每局每人一行）';
+
+-- ------------------------------------------------------------
+-- 7) 玩家每日标记（目前只用来认领"每日首胜"）
+-- ------------------------------------------------------------
+-- 为什么按"天"存一行、而不是在 users 里存 last_first_win_day：
+--   · 老表不加业务列（全局约定第 6 条）
+--   · 一行 = 一天，天然保留"哪天来过"的历史；以后做签到/每日任务直接在这张表上长
+-- day 用 CHAR(10) 存 UTC+8 的 YYYY-MM-DD：
+--   · 中国玩家的"今天"必须按北京时间切，用 UTC 切会在早上 8 点换日，玩家会觉得莫名其妙
+--   · 用字符串而不是 DATE，是为了让时区偏移完全在应用层决定，数据库不掺和时区
+CREATE TABLE IF NOT EXISTS player_daily (
+  user_id         BIGINT UNSIGNED NOT NULL,
+  day             CHAR(10)        NOT NULL COMMENT 'UTC+8 的日期 YYYY-MM-DD',
+  first_win_bonus TINYINT         NOT NULL DEFAULT 0 COMMENT '1 = 当天首胜奖励已领',
+  created_at      DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at      DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (user_id, day),
+  CONSTRAINT fk_player_daily_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB COMMENT='玩家每日标记（首胜）';
+
 -- ============================================================
 -- 扩展点：以后加功能时"加表"而不是"改表"（下面是说明书，不是待执行的建表语句）
 -- ============================================================

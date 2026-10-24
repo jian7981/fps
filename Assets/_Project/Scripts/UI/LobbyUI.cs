@@ -33,8 +33,13 @@ public class LobbyUI : MonoBehaviour
     public TMP_Text statusText;               // 状态行：创建房间 / 快速匹配 / 进房 的进度与结果
 
     [Header("【阶段3-F】账号")]
-    public Button authButton;                 // 主界面上的「账号」按钮（登录后显示"账号：昵称"）
     public AuthScreenUI authScreen;           // 登录 / 注册界面（全屏；脚本挂在 Canvas 上）
+    // 【阶段4-F】原来主菜单上那个「账号」按钮已移除：登录后的入口统一挪到**设置面板**的「退出登录」（见 SettingsUI）
+
+    [Header("【阶段4-G】个人主页")]
+    [Tooltip("个人主页（脚本挂在大厅 Canvas 上，它自己管 panelRoot 的显隐）。" +
+             "没配账号服务（-lobbyserver）时主菜单那张个人卡不显示，所以这里也打不开")]
+    public ProfileUI profileUI;
 
     [Header("【新功能】退出游戏")]
     public Button quitButton;                 // 主界面上的"退出游戏"按钮
@@ -57,9 +62,6 @@ public class LobbyUI : MonoBehaviour
         lobbyManager.OnStatus += ShowStatus;
         if (statusText != null) statusText.text = "";
 
-        // 【阶段3-F】订阅登录态变化 → 刷新「账号」按钮上的文字
-        AuthService.OnProfileChanged += RefreshAuthButton;
-
         // 1. 绑定主界面按钮（都是代码绑，Inspector 里的 OnClick 留空）
         selectMapButton.onClick.AddListener(OpenMapPanel);        // 点"选择地图" → 打开地图选择界面
         teamButton.onClick.AddListener(OnTeamClicked);            // 点"组队" → 按连接模式分流（见下）
@@ -67,11 +69,8 @@ public class LobbyUI : MonoBehaviour
         if (quickMatchButton != null) quickMatchButton.onClick.AddListener(OnQuickMatchClicked); // 【扩展】快速匹配
         if (joinRoomButton != null) joinRoomButton.onClick.AddListener(OnJoinRoomClicked);       // 加入房间（打开弹窗）
         if (roomListButton != null) roomListButton.onClick.AddListener(OnRoomListClicked);       // 【阶段3-D】打开房间列表
-        if (authButton != null) authButton.onClick.AddListener(OnAuthClicked);                   // 【阶段3-F】登录 / 注册
         settingsButton.onClick.AddListener(OpenSettingsPanel);    // 【新增】点"设置" → 打开设置界面
         if (quitButton != null) quitButton.onClick.AddListener(QuitGame);   // 【新功能】退出游戏
-
-        RefreshAuthButton();   // 按钮文字按当前登录态初始化一次
 
         // 2. 【阶段3-F】登录界面只在**还没登录**的时候拦一道。
         //    【Bug 修复】原来靠"是否从对局返回"的跨场景标记来判断 —— 但那个标记只在"设置面板 → 退出对局"
@@ -142,35 +141,10 @@ public class LobbyUI : MonoBehaviour
         else Debug.Log("[大厅] " + msg);
     }
 
-    // 【阶段3-F】从主菜单打开账号界面（已登录时它显示的是"资料 + 进入游戏 + 退出登录"）
-    private void OnAuthClicked()
-    {
-        if (authScreen == null)
-        {
-            Debug.LogWarning("[大厅] 账号界面未挂载（authScreen）");
-            ShowStatus("账号功能未挂载");
-            return;
-        }
-        HideAllPanels();          // 主菜单让位（账号界面在别的物体上，不受影响）
-        authScreen.Show();
-    }
-
-    // 【阶段3-F】按登录态刷新「登录」按钮的文字
-    private void RefreshAuthButton()
-    {
-        if (authButton == null) return;
-
-        TMP_Text label = authButton.GetComponentInChildren<TMP_Text>();
-        if (label == null) return;
-
-        label.text = AuthService.IsLoggedIn ? ("账号：" + AuthService.CurrentNickname) : "登录";
-    }
-
     private void OnDestroy()
     {
         // 取消订阅（大厅物体销毁时避免残留回调）
         if (lobbyManager != null) lobbyManager.OnStatus -= ShowStatus;
-        AuthService.OnProfileChanged -= RefreshAuthButton;
     }
 
     // 打开地图选择界面
@@ -180,6 +154,7 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(true);
         teamPanel.SetActive(false);
         settingsPanel.SetActive(false);
+        if (profileUI != null) profileUI.Close();   // 【阶段4-G】个人主页也是"大厅里的一个面板"，切面板时要一起让位
     }
 
     // 打开组队界面
@@ -189,6 +164,7 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(false);
         teamPanel.SetActive(true);
         settingsPanel.SetActive(false);
+        if (profileUI != null) profileUI.Close();
     }
 
     // 【新增】打开设置界面
@@ -198,6 +174,19 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(false);
         teamPanel.SetActive(false);
         settingsPanel.SetActive(true);
+        if (profileUI != null) profileUI.Close();
+    }
+
+    // 【阶段4-G】打开个人主页（主菜单那张个人卡的点击入口）
+    public void OpenProfilePanel()
+    {
+        if (profileUI == null)
+        {
+            Debug.LogWarning("[大厅] 个人主页未挂载（profileUI）→ 点个人卡没有反应");
+            return;
+        }
+        HideAllPanels();        // 主菜单等先让位（里面会顺手关掉主页，所以必须在 Open 之前调）
+        profileUI.Open();
     }
 
     // 回到大厅主界面（地图/组队/设置面板的"返回"按钮都调它）
@@ -207,6 +196,7 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(false);
         teamPanel.SetActive(false);
         settingsPanel.SetActive(false);
+        if (profileUI != null) profileUI.Close();
     }
 
     // 【阶段2.4-C】藏掉大厅的所有面板（进房间时用——房间面板显示期间不该看到主菜单）
@@ -216,6 +206,7 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(false);
         teamPanel.SetActive(false);
         settingsPanel.SetActive(false);
+        if (profileUI != null) profileUI.Close();   // 【阶段4-G】个人主页也在"大厅面板"里，必须一起关
 
         // 【Bug 修复】房间列表面板也要关 —— 它自己管显隐，不在上面那四个里；
         // 登录界面弹出时如果不关它，它会盖在登录界面上（实测踩到）

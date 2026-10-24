@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;   // Dictionary
+﻿﻿using System.Collections.Generic;   // Dictionary
 using UnityEngine;
 
 // ============ 对局规则：先到目标击杀数获胜 + 全员战绩记账 ============
@@ -122,6 +122,22 @@ public class MatchRules : MonoBehaviour
         if (!NetUtil.IsServerSide()) return;     // 只由权威侧上报
         if (!LobbyService.HasService) return;    // 没配登记服务 → 整个账号功能是关闭的
 
+        // ---------- 【阶段4-H】人机局不给经验 ----------
+        // 判定用的是"这个角色的连接"而不是"有没有登录令牌"：
+        //   · 真人玩家由 NetworkManager 生成，netIdentity.connectionToClient 非空（Host 也算）
+        //   · Bot 是服务器 NetworkServer.Spawn 出来的，没有 owner → connectionToClient 为 null
+        //   · 纯单机没有网络会话，所有角色都走不到联机生成流程 → 计数为 0
+        // 少于 2 个真人 = 这局是"一个人带一群 Bot 刷分"，整局不上报（否则经验系统就成了刷分器）。
+        int humans = 0;
+        foreach (KeyValuePair<Health, CombatantStats> pair in statsByHealth)
+            if (IsHumanPlayer(pair.Key)) humans++;
+
+        if (humans < 2)
+        {
+            Debug.Log("[战绩] 本局真人玩家 " + humans + " 名（< 2）→ 按人机局处理，不上报、不发经验");
+            return;
+        }
+
         int reported = 0;
         foreach (KeyValuePair<Health, CombatantStats> pair in statsByHealth)
         {
@@ -134,13 +150,38 @@ public class MatchRules : MonoBehaviour
             StartCoroutine(AuthService.ReportMatchStats(
                 health.accountToken, matchId, stats.teamId,
                 stats.kills, stats.deaths, stats.assists, won,
-                result => Debug.Log("[战绩] " + stats.displayName + " 上报成功：经验 +" + result.expGain
-                    + (result.leveledUp ? "，升到 " + result.level + " 级" : "")
-                    + (result.duplicated ? "（这一局之前已报过，未重复累加）" : "")),
-                err => Debug.LogWarning("[战绩] " + stats.displayName + " 上报失败：" + err)));
+                result =>
+                {
+                    Debug.Log("[战绩] " + stats.displayName + " 上报成功：经验 +" + result.expGain
+                        + (result.leveledUp ? "，升到 " + result.level + " 级" : "")
+                        + (result.duplicated ? "（这一局之前已报过，未重复累加）" : ""));
+
+                    // 【阶段4-H】把结算结果定向发给**这个玩家本人**
+                    // 注意判 connectionToClient：Bot 没有连接，对 Bot 调 TargetRpc 会报 "no connection"
+                    if (IsHumanPlayer(health))
+                    {
+                        health.TargetShowMatchReward(
+                            result.expGain, result.duplicated, result.levelBefore, result.level,
+                            result.exp, result.expToNext,
+                            result.baseExp, result.killExp, result.assistExp, result.winExp, result.dailyExp,
+                            result.capped);
+                    }
+                },
+                err =>
+                {
+                    Debug.LogWarning("[战绩] " + stats.displayName + " 上报失败：" + err);
+                    // 让玩家那边从"结算中…"变成明确的失败提示
+                    if (IsHumanPlayer(health)) health.TargetShowMatchRewardFailed(err);
+                }));
             reported++;
         }
 
-        Debug.Log("[战绩] 本局 " + matchId + " 共上报 " + reported + " 名登录玩家");
+        Debug.Log("[战绩] 本局 " + matchId + " 共 " + humans + " 名真人、上报 " + reported + " 名登录玩家");
+    }
+
+    // 真人玩家 = 有连接的玩家对象（Host 的本机玩家也有连接；Bot 没有）
+    private static bool IsHumanPlayer(Health health)
+    {
+        return health != null && health.netIdentity != null && health.netIdentity.connectionToClient != null;
     }
 }

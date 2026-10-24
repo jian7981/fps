@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 using Mirror;
 
 // 【阶段2.4-B】房间玩家（Lobby 房间里"这一位玩家"）
@@ -15,6 +15,7 @@ public class RoomPlayer : NetworkRoomPlayer
     [SyncVar] public bool isRoomOwner;          // 【阶段3】房主身份：第一个进房的人（逻辑标记，不依赖"谁跑服务器"→ 云服务器上也有房主）
     [SyncVar] public string roomCode = "";      // 【阶段3-房间码】服务器向登记服务注册成功后下发；房间面板显示给玩家分享
     [SyncVar] public int joinOrder;             // 【阶段3-玩家名】进房顺序（1 = 房主）；名字与队内排序都用它
+    [SyncVar] public int avatarId;              // 【阶段4-G】头像编号（0 = 默认）；房间玩家框靠它显示各人头像
 
     // 【阶段4】账号令牌：**只留在服务器内存里**，绝不做 SyncVar —— 那是账号凭证，不该下发给任何客户端。
     // 用途只有一个：对局结束后服务器替这名玩家上报战绩（客户端自己拿令牌是调不通那个接口的）。
@@ -41,16 +42,22 @@ public class RoomPlayer : NetworkRoomPlayer
             return;
         }
 
-        CmdSetAccount(AuthService.CurrentNickname, AuthService.CurrentToken);
+        CmdSetAccount(AuthService.CurrentNickname, AuthService.CurrentToken, AuthService.CurrentAvatarId);
     }
 
     [Command]
-    private void CmdSetAccount(string nickname, string token)
+    private void CmdSetAccount(string nickname, string token, int newAvatarId)
     {
         // 昵称走 SyncVar → 房间界面与对局战绩表都会显示真昵称
         if (!string.IsNullOrWhiteSpace(nickname)) displayName = nickname.Trim();
         accountToken = token ?? "";
-        Debug.Log($"[房间] {displayName} 已绑定账号（对局结束会写入战绩）");
+
+        // 【阶段4-G】头像编号由**客户端自报**，服务器只做范围校验。
+        // 为什么不做签名/查库校验：头像不参与任何战斗判定，被伪造也只是改到自己头上；
+        // 为它加一层验证的收益远不如复杂度。越界的一律回落到 0（默认头像）。
+        avatarId = (newAvatarId >= 0 && newAvatarId <= AvatarLibrary.MaxAvatarId) ? newAvatarId : 0;
+
+        Debug.Log($"[房间] {displayName} 已绑定账号（头像 #{avatarId}，对局结束会写入战绩）");
     }
 
     // 服务器：房间玩家生成时——分配名字、队伍、座位

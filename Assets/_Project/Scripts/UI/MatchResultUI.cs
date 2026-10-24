@@ -1,3 +1,4 @@
+using System.Collections;           // IEnumerator（经验结算超时等待）
 using System.Collections.Generic;   // List<>
 using UnityEngine;
 using UnityEngine.UI;               // Button
@@ -25,15 +26,28 @@ public class MatchResultUI : MonoBehaviour
     public Transform rightColumn;    // B队 行容器
     public ScoreRowUI rowPrefab;     // 行预制体（ScoreRow.prefab，挂 ScoreRowUI 脚本）
 
+    [Header("【阶段4-H】经验结算（可留空）")]
+    [Tooltip("多行文本：\"+152 EXP\" / 分项明细 / 升级提示。建议在 ResultPanel 里加一个 TMP 文本")]
+    public TMP_Text rewardText;
+    [Tooltip("小字状态：\"经验结算中…\" / \"本局不计经验…\" / 失败原因")]
+    public TMP_Text rewardStatusText;
+    [Tooltip("等这么久还没收到经验结果 → 判为本局不计经验（人机局 / 未登录）")]
+    public float rewardTimeout = 6f;
+
     // 运行时生成的行（每边固定 5 行 = Constants.TeamSize）
     private readonly List<ScoreRowUI> leftRows = new List<ScoreRowUI>();
     private readonly List<ScoreRowUI> rightRows = new List<ScoreRowUI>();
+
+    // 【阶段4-H】本机玩家（订阅经验结算用）+ 超时协程
+    private Health localHealth;
+    private Coroutine rewardTimeoutRoutine;
 
     private void Start()
     {
         if (!CheckRefs()) return;
 
         resultPanel.SetActive(false);                      // 开局先藏起来
+        SetRewardVisible(false);                           // 【修复】经验文本在 MatchCanvas 下、不在 ResultPanel 里 → 必须单独藏
         returnButton.onClick.AddListener(ReturnToLobby);   // 绑定按钮（代码绑，OnClick 留空）
 
         // 【阶段2.4-C】返回房间：只有联机时显示（单机没有"房间"概念）
@@ -80,6 +94,14 @@ public class MatchResultUI : MonoBehaviour
     private void OnDisable()
     {
         if (matchState != null) matchState.OnMatchOver -= ShowResult;   // 配对取消订阅
+
+        // 【阶段4-H】经验结算的订阅/延时也要收回（场景卸载时事件源跟着一起销毁，留着无害但不对称）
+        if (localHealth != null)
+        {
+            localHealth.OnMatchReward -= HandleReward;
+            localHealth.OnMatchRewardFailed -= HandleRewardFailed;
+        }
+        StopRewardTimeout();
     }
 
     // 对局结束：填面板并显示
@@ -96,12 +118,16 @@ public class MatchResultUI : MonoBehaviour
         }
 
         int myTeam = 0;
+        Health myHealth = null;
         if (myPlayer != null)
         {
-            Health myHealth = myPlayer.GetComponentInChildren<Health>();
+            myHealth = myPlayer.GetComponentInChildren<Health>();
             if (myHealth != null) myTeam = myHealth.TeamId;
         }
         titleText.text = (winnerTeamId == myTeam) ? "胜利！" : "失败…";
+
+        // 【阶段4-H】经验结算：结果由服务器稍后 TargetRpc 发过来（这里先把状态挂好）
+        BeginReward(myHealth);
 
         // 2. 最终比分
         scoreText.text = "A队 " + matchState.TeamAScore + " : " + matchState.TeamBScore + " B队";
@@ -112,8 +138,123 @@ public class MatchResultUI : MonoBehaviour
 
         // 4. 显示面板 + 解锁鼠标（不解锁的话按钮点不了）
         resultPanel.SetActive(true);
+        SetRewardVisible(true);   // 经验文本跟着结算面板一起显示（它们不在 ResultPanel 层级下）
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+    }
+
+    // 【修复】经验文本显隐
+    // 场景里 RewardText / RewardStatusText 是 **MatchCanvas 的直接子物体**（和 ResultPanel 平级），
+    // 所以 Start 里只关 resultPanel 不会关掉它们 —— 实测表现为对局中一直挂着两行文本。
+    // 这里跟着结算面板单独开关；只控制 SetActive，不动层级与布局。
+    private void SetRewardVisible(bool visible)
+    {
+        if (rewardText != null) rewardText.gameObject.SetActive(visible);
+        if (rewardStatusText != null) rewardStatusText.gameObject.SetActive(visible);
+    }
+
+    // ==================== 【阶段4-H】经验结算 ====================
+    // 数据不是本地算的：服务器替每个玩家上报后端 → 后端算经验/升级 → TargetRpc 发回本人。
+    // 所以面板要先进入"结算中…"，结果到了再替换（HTTP 往返通常几十~几百毫秒）。
+    private void BeginReward(Health health)
+    {
+        localHealth = health;
+        if (rewardText != null) rewardText.text = "";
+
+        if (health == null)
+        {
+            SetRewardStatus("");
+            return;
+        }
+
+        // 先退订再订阅：ShowResult 正常只来一次，但重复调用也不该叠加两份回调
+        health.OnMatchReward -= HandleReward;
+        health.OnMatchReward += HandleReward;
+        health.OnMatchRewardFailed -= HandleRewardFailed;
+        health.OnMatchRewardFailed += HandleRewardFailed;
+
+        // 结果可能比结算面板更早到（例如网络极快）→ 直接显示现成的
+        if (health.LastMatchReward != null)
+        {
+            HandleReward(health.LastMatchReward);
+            return;
+        }
+
+        // 没登录 / 没配账号服务：根本不会有上报，别让玩家等一个永远不会来的结果
+        if (!AuthService.HasService || !AuthService.IsLoggedIn)
+        {
+            SetRewardStatus("未登录，本局不计经验");
+            return;
+        }
+
+        SetRewardStatus("经验结算中…");
+
+        // ⚠ 不能用 Invoke：对局结束时 GameManager 把 Time.timeScale 冻成 0，
+        //   而 Invoke 走的是**缩放时间**，永远等不到。这里用 realtime 协程。
+        StopRewardTimeout();
+        rewardTimeoutRoutine = StartCoroutine(RewardTimeoutRoutine());
+    }
+
+    private IEnumerator RewardTimeoutRoutine()
+    {
+        yield return new WaitForSecondsRealtime(rewardTimeout);
+        rewardTimeoutRoutine = null;
+
+        // 常见原因：人机局（真人 < 2，服务器整局不上报）或未登录
+        SetRewardStatus("本局不计经验（人机局或未登录）");
+    }
+
+    private void StopRewardTimeout()
+    {
+        if (rewardTimeoutRoutine != null)
+        {
+            StopCoroutine(rewardTimeoutRoutine);
+            rewardTimeoutRoutine = null;
+        }
+    }
+
+    private void HandleReward(MatchReward reward)
+    {
+        if (reward == null) return;
+        StopRewardTimeout();
+        SetRewardStatus("");
+
+        if (rewardText == null) return;
+
+        // 同一局重复上报（反复点返回、超时重发）→ 后端幂等拦下，这里明确告诉玩家没重复加
+        if (reward.duplicated)
+        {
+            rewardText.text = "本局经验之前已结算过";
+            return;
+        }
+
+        string detail = "+" + reward.expGain + " EXP";
+        if (reward.capped) detail += "（已达单局上限）";
+
+        // 分项只列非 0 的，避免一整排 "+0"
+        string parts = "参与 +" + reward.baseExp;
+        if (reward.killExp > 0) parts += "　击杀 +" + reward.killExp;
+        if (reward.assistExp > 0) parts += "　助攻 +" + reward.assistExp;
+        if (reward.winExp > 0) parts += "　胜利 +" + reward.winExp;
+        if (reward.dailyExp > 0) parts += "　首胜 +" + reward.dailyExp;
+
+        // 升级了就把"Lv.x → Lv.y"单独一行，比只显示"Lv.y"更醒目
+        string levelLine = (reward.levelAfter > reward.levelBefore)
+            ? "\n升级！Lv." + reward.levelBefore + " → Lv." + reward.levelAfter
+            : "\nLv." + reward.levelAfter + "　" + reward.exp + " / " + reward.expToNext;
+
+        rewardText.text = detail + "\n" + parts + levelLine;
+    }
+
+    private void HandleRewardFailed(string error)
+    {
+        StopRewardTimeout();
+        SetRewardStatus(string.IsNullOrEmpty(error) ? "经验结算失败" : "经验结算失败：" + error);
+    }
+
+    private void SetRewardStatus(string msg)
+    {
+        if (rewardStatusText != null) rewardStatusText.text = msg;
     }
 
     // 把某一队的战绩填进对应的一栏（登记顺序 = 组队界面的格子顺序）
