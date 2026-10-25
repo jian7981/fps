@@ -167,6 +167,25 @@ CREATE TABLE IF NOT EXISTS player_daily (
   CONSTRAINT fk_player_daily_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB COMMENT='玩家每日标记（首胜）';
 
+-- ------------------------------------------------------------
+-- 8) 玩家角色 / 武器选择（大厅展示 + 战斗外观）
+-- ------------------------------------------------------------
+-- 按本文件全局约定：新功能 = 新增表，不往 users / player_stats 塞业务列。
+-- 目前只落地“角色选择”；selected_weapon_id 先留好，后续做武器选择直接复用。
+-- 服务端只存角色 id（和 Unity CharacterCatalog 的 id 对齐），不存预制体路径：
+--   换模型/换美术只改客户端资产，数据库一行都不用动。
+CREATE TABLE IF NOT EXISTS player_loadout (
+  user_id                BIGINT UNSIGNED NOT NULL,
+  selected_character_id  VARCHAR(64)     NOT NULL DEFAULT 'xbot'
+                         COMMENT '角色 id；必须和客户端 CharacterCatalog 的白名单一致',
+  selected_weapon_id     VARCHAR(64)     NULL
+                         COMMENT '预留：大厅展示/战斗武器 id',
+  updated_at             DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+                         ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (user_id),
+  CONSTRAINT fk_loadout_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB COMMENT='玩家角色/武器选择（外观与大厅展示）';
+
 -- ============================================================
 -- 扩展点：以后加功能时"加表"而不是"改表"（下面是说明书，不是待执行的建表语句）
 -- ============================================================

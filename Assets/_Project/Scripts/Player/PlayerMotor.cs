@@ -1,4 +1,4 @@
-﻿﻿using UnityEngine;
+﻿﻿﻿﻿using UnityEngine;
 using Mirror;   // 【阶段2.1】NetworkBehaviour
 
 [RequireComponent(typeof(CharacterController))]

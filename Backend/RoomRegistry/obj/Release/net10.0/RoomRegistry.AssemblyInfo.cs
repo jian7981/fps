@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RoomRegistry")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+23575577cce715d6063fa6c3539c8a05b3898384")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+823294698fc9008fca024335b57e50cec2dd9332")]
 [assembly: System.Reflection.AssemblyProductAttribute("RoomRegistry")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RoomRegistry")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

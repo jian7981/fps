@@ -130,6 +130,7 @@ app.MapGet("/api/rooms/{code}", (string code) =>
 // 不能让它拖住房间登记服务的启动。
 AuthEndpoints.Map(app);
 StatsEndpoints.Map(app);
+CharacterEndpoints.Map(app);   // 角色/大厅装扮选择
 _ = Db.ReportStartupStatusAsync();
 
 Console.WriteLine($"房间登记服务已启动：http://0.0.0.0:{port}（Ctrl+C 停止）");
