@@ -13,6 +13,11 @@ public class GameNetworkManager : NetworkRoomManager
     // 每次场景切换时清空（为下一局重新累计）
     private readonly HashSet<Transform> usedSpawnPoints = new HashSet<Transform>();
 
+    // 【阶段5】角色选择：按 RoomPlayer 上报的 characterId，从目录里取对应的战斗预制体。
+    // 显式字段留空时，用 LobbyCharacterSystem 留下的跨场景静态目录（Lobby 场景销毁后仍可用）。
+    [Header("角色选择（战斗外观）")]
+    [SerializeField] private CharacterCatalog characterCatalog;
+
     // ================= 【阶段3-房间码】登记服务相关 =================
     private string publicIpOverride = "";   // -publicip：显式指定对外 IP（留空 = 让登记服务用请求来源 IP 回填）
     private int roomPort = 7777;            // 本房间对外端口（来自 -port）
@@ -30,6 +35,12 @@ public class GameNetworkManager : NetworkRoomManager
     //   参数不全会直接让进程退出；实测踩过这个坑），所以自定义参数统一用 -servermode。
     public override void Start()
     {
+        // 【阶段5】Mirror 的动态生成预制体必须在 Server/Client 启动前注册；
+        // 否则客机会报 "Failed to spawn server object ... assetId=..."，
+        // 表现就是房主能进图、另一个玩家卡在房间/加载画面。
+        // 在 base.Start() 之前把所有角色的 combatPrefab 加进 spawnPrefabs。
+        RegisterCharacterCombatPrefabs();
+
         base.Start();
 
         // 【阶段3-房间码】读 -lobbyserver（服务器与客户端共用同一个参数名）；
@@ -268,13 +279,57 @@ public class GameNetworkManager : NetworkRoomManager
         Transform spawn = PickSpawn(list, seat);
         usedSpawnPoints.Add(spawn);                          // 记为本局已占用
 
-        GameObject gamePlayer = Instantiate(playerPrefab, spawn.position, spawn.rotation);
+        // 【阶段5】按房间玩家上报的角色 id 选战斗预制体；未知/未配置 → 回退默认 XBot Player。
+        string characterId = (rp != null) ? rp.characterId : "xbot";
+        GameObject prefab = ResolveCombatPlayerPrefab(characterId);
+        if (prefab == null) prefab = playerPrefab;
+        GameObject gamePlayer = Instantiate(prefab, spawn.position, spawn.rotation);
+
         // 【扩展】把他的"专属出生点"记在 Health 上 → 之后死亡复活会优先回到这个点（被占则顺延）
         Health h = gamePlayer.GetComponentInChildren<Health>();
         if (h != null) h.SetRespawnPoint(spawn);
 
-        Debug.Log($"[房间] {(team == 0 ? "A" : "B")}队 {seat + 1} 号位出生点：{spawn.name}");
+        Debug.Log($"[房间] {(team == 0 ? "A" : "B")}队 {seat + 1} 号位出生点：{spawn.name}；战斗角色：{characterId}（{(prefab != null ? prefab.name : "null")}）");
         return gamePlayer;   // 返回给基类去替换 roomPlayer
+    }
+
+    // 从角色目录解析战斗预制体；只允许目录里存在且 combatPrefab 已配置的 id。
+    // 这个校验放在服务器侧：客户端只能上报 id，不能指定任意预制体。
+    private GameObject ResolveCombatPlayerPrefab(string characterId)
+    {
+        CharacterCatalog catalog = characterCatalog != null ? characterCatalog : LobbyCharacterSystem.ActiveCatalog;
+        if (catalog == null) return playerPrefab;
+
+        CharacterDefinition def = catalog.Find(characterId);
+        if (def != null && def.combatPrefab != null) return def.combatPrefab;
+
+        return playerPrefab;
+    }
+
+    // 把目录里所有 combatPrefab 注册到 NetworkManager.spawnPrefabs。
+    // 这是 Mirror 的硬性要求：服务器动态生成、但不在场景里的预制体，客机必须先认识 assetId。
+    // 以后新增角色时只要配好 CharacterDefinition.combatPrefab，这里自动注册，不用再手动维护预制体列表。
+    private void RegisterCharacterCombatPrefabs()
+    {
+        CharacterCatalog catalog = characterCatalog != null ? characterCatalog : LobbyCharacterSystem.ActiveCatalog;
+        if (catalog == null || catalog.characters == null) return;
+
+        int added = 0;
+        for (int i = 0; i < catalog.characters.Length; i++)
+        {
+            CharacterDefinition def = catalog.characters[i];
+            if (def == null || def.combatPrefab == null) continue;
+            // playerPrefab 由 Mirror 基类单独注册；重复放进 spawnPrefabs 会触发
+            // "Replacing existing prefab with assetId..." 警告，这里直接跳过。
+            if (def.combatPrefab == playerPrefab) continue;
+            if (spawnPrefabs.Contains(def.combatPrefab)) continue;
+
+            spawnPrefabs.Add(def.combatPrefab);
+            added++;
+        }
+
+        if (added > 0)
+            Debug.Log($"[角色选择] 已注册 {added} 个战斗预制体到 NetworkManager.spawnPrefabs");
     }
 
     // 选出生点：优先"座位号 % 长度"对应的那个；被占用了就顺延找下一个空的；全被占了就返回座位对应的

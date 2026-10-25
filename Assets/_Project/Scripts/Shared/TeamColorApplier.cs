@@ -1,6 +1,8 @@
 ﻿﻿﻿﻿using UnityEngine;
 
 // 按队伍给角色上色：0 = A队(蓝)，1 = B队(红)
+// 【阶段5-B】默认关闭（tintEnabled = false）：全身染色会破坏 RifleGirl 美术，
+//             敌我识别统一改用 TeamOutlineController 的红色/浅绿色轮廓。
 // 【阶段2 注意】每个客户端只给自己/服务器权威设置；本地玩家用 isLocalPlayer 判断
 //
 // 【阶段4-D1 修复】两个毛病：
@@ -12,6 +14,11 @@
 [RequireComponent(typeof(Health))]
 public class TeamColorApplier : MonoBehaviour
 {
+    [Header("队伍染色开关")]
+    [Tooltip("默认关闭：阶段 5-B 起敌我识别统一用 TeamOutlineController 轮廓，避免破坏角色美术。" +
+             "需要临时恢复全身染色时再勾选")]
+    [SerializeField] private bool tintEnabled = false;
+
     [SerializeField] private Color teamAColor = new Color(0.25f, 0.55f, 1f);
     [SerializeField] private Color teamBColor = new Color(1f, 0.32f, 0.28f);
 
@@ -24,6 +31,9 @@ public class TeamColorApplier : MonoBehaviour
 
     private void Start()
     {
+        // 阶段 5-B：默认关闭全身染色，敌我识别改由 TeamOutlineController 负责
+        if (!tintEnabled) return;
+
         Health health = GetComponent<Health>();
         Color color = (health.TeamId == 0) ? teamAColor : teamBColor;
 

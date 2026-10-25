@@ -1,5 +1,6 @@
 ﻿﻿﻿﻿using UnityEngine;
 using Mirror;
+using Shared;
 
 // 【阶段2.4-B】房间玩家（Lobby 房间里"这一位玩家"）
 // 职责：显示名 + 队伍 + 座位号（只有服务器在玩家进房时决定）；
@@ -16,6 +17,10 @@ public class RoomPlayer : NetworkRoomPlayer
     [SyncVar] public string roomCode = "";      // 【阶段3-房间码】服务器向登记服务注册成功后下发；房间面板显示给玩家分享
     [SyncVar] public int joinOrder;             // 【阶段3-玩家名】进房顺序（1 = 房主）；名字与队内排序都用它
     [SyncVar] public int avatarId;              // 【阶段4-G】头像编号（0 = 默认）；房间玩家框靠它显示各人头像
+    [SyncVar] public string characterId = "xbot";   // 【阶段5】玩家在大厅选择的角色 id；服务器生成战斗玩家时用
+
+    // 本机玩家是否已经把"大厅选中的角色"报给服务器（只报一次，避免每帧发命令）
+    private bool characterReported;
 
     // 【阶段4】账号令牌：**只留在服务器内存里**，绝不做 SyncVar —— 那是账号凭证，不该下发给任何客户端。
     // 用途只有一个：对局结束后服务器替这名玩家上报战绩（客户端自己拿令牌是调不通那个接口的）。
@@ -32,8 +37,20 @@ public class RoomPlayer : NetworkRoomPlayer
 
     private void Update()
     {
-        if (accountAttempted || !isLocalPlayer) return;
-        accountAttempted = true;              // 只试一次：没登录也不用每帧重试
+        if (!isLocalPlayer) return;
+
+        // 【阶段5】先上报大厅选中的角色：即使未登录也要报，进图时服务器要按它生成战斗预制体。
+        // 只报一次：大厅选择发生在进房之前，房间玩家生成时本地 already 有 selected_character_id。
+        if (!characterReported)
+        {
+            characterReported = true;
+            AuthService.Init();
+            string selected = DataManager.Store.GetString("selected_character_id", "xbot");
+            CmdSetCharacter(selected);
+        }
+
+        if (accountAttempted) return;
+        accountAttempted = true;
 
         AuthService.Init();                   // 先把本地存档里的令牌读出来（幂等）
         if (!AuthService.IsLoggedIn)
@@ -58,6 +75,17 @@ public class RoomPlayer : NetworkRoomPlayer
         avatarId = (newAvatarId >= 0 && newAvatarId <= AvatarLibrary.MaxAvatarId) ? newAvatarId : 0;
 
         Debug.Log($"[房间] {displayName} 已绑定账号（头像 #{avatarId}，对局结束会写入战绩）");
+    }
+
+    // 【阶段5】大厅选中的角色 id 上报给服务器。
+    // 客户端只报 id，不报预制体路径；服务器再用 CharacterCatalog 校验/解析，找不到一律回退 XBot。
+    [Command]
+    private void CmdSetCharacter(string id)
+    {
+        id = (id ?? "").Trim();
+        if (id.Length == 0 || id.Length > 64) id = "xbot";
+        characterId = id;
+        Debug.Log($"[角色选择] {displayName} 上报战斗角色：{characterId}");
     }
 
     // 服务器：房间玩家生成时——分配名字、队伍、座位

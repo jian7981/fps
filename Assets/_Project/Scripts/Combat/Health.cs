@@ -78,6 +78,18 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
         isDead = false;
     }
 
+    private void Start()
+    {
+        // 【阶段5-B】敌我识别：所有战斗角色自动补挂队伍轮廓控制器，
+        // 不需要在每个预制体上手动添加（大厅展示预制体没有 Health，不会被误加）。
+        if (GetComponent<TeamOutlineController>() == null)
+            gameObject.AddComponent<TeamOutlineController>();
+
+        // RifleGirl 等角色的动作自带 SwitchSocket 动画事件（原包由 Character_Weapon_Controller 接收）。
+        // 给所有 Animator 所在物体补接收器，避免报 "AnimationEvent ... has no receiver"。
+        CharacterAnimationEventReceiver.EnsureOn(gameObject);
+    }
+
     // 【阶段2.3】联机：玩家由 NetworkManager 生成，GameManager 不再负责登记（它整体跳过了）
     // → 服务器在"每个角色生成时"把他登记进 MatchRules（这是团队计分 / 战绩表的根基）
     // 纯单机不会触发 OnStartServer，登记仍由 GameManager 负责，行为不变

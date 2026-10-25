@@ -9,6 +9,10 @@ public class GameManager : MonoBehaviour
     [Header("玩家预制体")]
     public GameObject playerPrefab;
 
+    [Header("角色选择（战斗外观）")]
+    [Tooltip("留空时使用 LobbyCharacterSystem 留下的跨场景目录；再找不到就用 playerPrefab（XBot）")]
+    public CharacterCatalog characterCatalog;
+
     [Header("Bot 预制体")]
     public GameObject botPrefab;
 
@@ -76,7 +80,9 @@ public class GameManager : MonoBehaviour
 
     void SpawnPlayerSingle()
     {
-        if (playerPrefab == null)
+        // 【阶段5】单机/直接运行 map1 时，也按大厅选中的角色生成对应的战斗预制体。
+        GameObject prefab = ResolvePlayerPrefab();
+        if (prefab == null)
         {
             Debug.LogError("玩家预制体未设置！");
             return;
@@ -87,12 +93,30 @@ public class GameManager : MonoBehaviour
             return;
         }
         Transform spawnPos = GetRandomSpawnPoint(0); // 用随机出生点
-        currentPlayer = Instantiate(playerPrefab, spawnPos.position, spawnPos.rotation);
+        currentPlayer = Instantiate(prefab, spawnPos.position, spawnPos.rotation);
         SetupRespawn(currentPlayer);
 
         // 【步骤1.5】把玩家登记给规则：死亡计分 + 战绩表里名字显示"你"
         Health playerHealth = currentPlayer.GetComponentInChildren<Health>();
         if (playerHealth != null && matchRules != null) matchRules.RegisterCombatant(playerHealth, "你");
+    }
+
+    // 单机生成时解析：本地 selected_character_id → CharacterCatalog → combatPrefab。
+    // 目录未配置 / id 未知 / combatPrefab 为空时，回退原来的 playerPrefab（XBot）。
+    private GameObject ResolvePlayerPrefab()
+    {
+        CharacterCatalog catalog = characterCatalog != null ? characterCatalog : LobbyCharacterSystem.ActiveCatalog;
+        string id = DataManager.Store.GetString("selected_character_id", "xbot");
+        if (catalog != null)
+        {
+            CharacterDefinition def = catalog.Find(id);
+            if (def != null && def.combatPrefab != null)
+            {
+                Debug.Log($"[角色选择] 单机生成战斗角色：{id}（{def.combatPrefab.name}）");
+                return def.combatPrefab;
+            }
+        }
+        return playerPrefab;
     }
 
     // 按对局配置里的 AI 格子生成 Bot

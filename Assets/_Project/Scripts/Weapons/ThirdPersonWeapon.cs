@@ -134,6 +134,16 @@ public class ThirdPersonWeapon : MonoBehaviour
         currentIndex = index;
     }
 
+    // 大厅/展示用：不经过 WeaponController，直接切换手上显示的武器。
+    // index 对应 gunPrefabs / holdLocal* 数组下标；以后做"选择带入武器 / 选择大厅展示武器"时，
+    // 大厅侧只需要找到角色的 ThirdPersonWeapon 并调用这个方法。
+    // 注意：战斗里不要直接调用它绕过 WeaponController，否则会和真实武器状态不同步。
+    public void SetDisplayWeapon(int index)
+    {
+        ResolveHandBone();   // 换角色后 handBone 可能为空，先按 Humanoid 重解析
+        ShowGun(index);
+    }
+
     // 取第 index 把枪的姿态配置；数组没配 / 不够长时用默认值（位置/旋转 = 0，缩放 = 1）
     private Vector3 GetPoseValue(Vector3[] array, int index, Vector3 defaultValue)
     {
