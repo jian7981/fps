@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "d:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj": {}
+    "D:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj": {}
   },
   "projects": {
-    "d:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj": {
+    "D:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "d:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj",
+        "projectUniqueName": "D:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj",
         "projectName": "RoomRegistry",
-        "projectPath": "d:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj",
+        "projectPath": "D:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj",
         "packagesPath": "C:\\Users\\22922\\.nuget\\packages\\",
-        "outputPath": "d:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\obj\\",
+        "outputPath": "D:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "D:\\vsshare\\NuGetPackages"

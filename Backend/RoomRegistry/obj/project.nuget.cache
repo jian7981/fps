@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "yNYa++kz5Z8=",
+  "dgSpecHash": "aGKin/netEw=",
   "success": true,
-  "projectFilePath": "d:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj",
+  "projectFilePath": "D:\\unitydemo\\Blow up your brother\\Backend\\RoomRegistry\\RoomRegistry.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\22922\\.nuget\\packages\\mysqlconnector\\2.4.0\\mysqlconnector.2.4.0.nupkg.sha512"
   ],

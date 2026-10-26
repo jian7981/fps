@@ -9570,6 +9570,7 @@ MonoBehaviour:
   _allPlayersReady: 0
   stopServerWhenEmptyInHeadless: 0
   clientIndex: 0
+  characterCatalog: {fileID: 0}
 --- !u!4 &595980561
 Transform:
   m_ObjectHideFlags: 0
@@ -14865,6 +14866,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   catalog: {fileID: 11400000, guid: 236ad6fbb8811a44e858518a554d66ea, type: 2}
   characterAnchor: {fileID: 130279892}
+  displayWeaponIndex: 0
   localCharacterKey: selected_character_id
   pendingSyncKey: character_pending_sync
   logSync: 1

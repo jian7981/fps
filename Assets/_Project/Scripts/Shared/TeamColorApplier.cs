@@ -1,4 +1,4 @@
-﻿﻿﻿﻿using UnityEngine;
+﻿﻿﻿﻿﻿﻿using UnityEngine;
 
 // 按队伍给角色上色：0 = A队(蓝)，1 = B队(红)
 // 【阶段5-B】默认关闭（tintEnabled = false）：全身染色会破坏 RifleGirl 美术，

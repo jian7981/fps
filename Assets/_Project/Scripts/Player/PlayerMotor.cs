@@ -19,6 +19,8 @@ public class PlayerMotor : NetworkBehaviour
     [Header("动画（没有 Animator 也不会报错）")]
     [SerializeField] private Animator animator;               // 【新增】留空 = Awake 自动找同物体上的 Animator
     [SerializeField] private string speedParameter = "Speed"; // 【新增】参数名，要和 Animator Controller 里一致
+    [SerializeField] private string moveXParameter = "MoveX"; // 2D 混合树：本地右方向（-1 ~ 1）
+    [SerializeField] private string moveYParameter = "MoveY"; // 2D 混合树：本地前方向（-1 ~ 1）
     [SerializeField] private float animDamp = 10f;            // 【新增】速度平滑，避免动作抽搐
     // 【新增，1.7b】跳跃动画参数名（要和 Animator Controller 里的参数名对得上）
     [SerializeField] private string groundedParameter = "isGrounded";   // 是否在地面
@@ -144,14 +146,7 @@ public class PlayerMotor : NetworkBehaviour
         Vector3 planarDelta = new Vector3(delta.x, 0f, delta.z);       // 只取水平位移
         float planarSpeed = planarDelta.magnitude / Time.deltaTime;    // 速度的"大小"（不分方向）
 
-        // 【新增】后退判定：位移方向和自己面朝的方向相反 → 速度取负
-        // 负值会去混合树左边的档位：-5 = 后退走，-9 = 后退跑
-        if (Vector3.Dot(planarDelta, transform.forward) < 0f)
-        {
-            planarSpeed = -planarSpeed;
-        }
-
-        SetAnimatorSpeed(planarSpeed);
+        UpdateMoveAnimator(planarDelta, planarSpeed);
         // 【新增，1.7b】把地面/跳跃状态写给 Animator（驱动 起跳 → 滞空 → 落地 三段动画）
         // 【改】跳跃状态本机评估并同步给服务器：远端玩家也能看到跳跃/落地动画
         if (localControl)
@@ -173,12 +168,51 @@ public class PlayerMotor : NetworkBehaviour
         SetAnimatorSpeed(planarSpeed);
     }
 
+    // 把移动方向写进 Animator：
+    //   MoveX = 本地右方向，MoveY = 本地前方向（带速度层级：走路≈0.55，跑步=1；蹲走=1）
+    //   Speed 仍保留，兼容旧的 1D 混合树 / 其他逻辑。
+    // 侧移时只靠 Speed 会因 dot(forward)≈0 来回翻符号 → 动画在前进/后退档之间跳；这里彻底拆开方向。
+    void UpdateMoveAnimator(Vector3 planarDelta, float planarSpeed)
+    {
+        if (animator == null) return;
+
+        float moveX = 0f;
+        float moveY = 0f;
+        float signedSpeed = 0f;
+
+        if (planarDelta.sqrMagnitude > 0.000001f && planarSpeed > 0.05f)
+        {
+            Vector3 localDir = transform.InverseTransformDirection(planarDelta.normalized);
+            float radialMax = crouched
+                ? Mathf.Max(0.01f, moveSpeed * crouchSpeedScale)
+                : Mathf.Max(0.01f, sprintSpeed);
+            float tier = Mathf.Clamp01(planarSpeed / radialMax);
+
+            moveX = localDir.x * tier;
+            moveY = localDir.z * tier;
+
+            // 旧 1D 混合树兼容：只有明显后退才取负；纯侧移保持正速度，避免 0 附近来回跳档
+            float forwardDot = Vector3.Dot(planarDelta.normalized, transform.forward);
+            signedSpeed = forwardDot < -0.35f ? -planarSpeed : planarSpeed;
+        }
+
+        SetAnimatorLocomotion(signedSpeed, moveX, moveY);
+    }
+
     // 【新增】平滑地把速度写进 Animator 参数
     void SetAnimatorSpeed(float targetSpeed)
     {
+        SetAnimatorLocomotion(targetSpeed, 0f, 0f);
+    }
+
+    void SetAnimatorLocomotion(float targetSpeed, float targetMoveX, float targetMoveY)
+    {
         if (animator == null) return;
-        float current = animator.GetFloat(speedParameter);
-        animator.SetFloat(speedParameter, Mathf.Lerp(current, targetSpeed, animDamp * Time.deltaTime));
+
+        float t = animDamp * Time.deltaTime;
+        animator.SetFloat(speedParameter, Mathf.Lerp(animator.GetFloat(speedParameter), targetSpeed, t));
+        animator.SetFloat(moveXParameter, Mathf.Lerp(animator.GetFloat(moveXParameter), targetMoveX, t));
+        animator.SetFloat(moveYParameter, Mathf.Lerp(animator.GetFloat(moveYParameter), targetMoveY, t));
     }
 
 

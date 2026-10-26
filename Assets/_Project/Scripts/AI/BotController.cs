@@ -37,6 +37,8 @@ public class BotController : MonoBehaviour
     [Header("动画")]
     [SerializeField] private Animator animator;                // 留空 = 自动找子物体
     [SerializeField] private string speedParameter = "Speed";  // 和 Animator Controller 里一致
+    [SerializeField] private string moveXParameter = "MoveX";  // 2D 混合树：本地右方向
+    [SerializeField] private string moveYParameter = "MoveY";  // 2D 混合树：本地前方向
     [SerializeField] private float animDamp = 10f;             // 速度平滑
 
     // ---------- 运行时引用 ----------
@@ -96,10 +98,21 @@ public class BotController : MonoBehaviour
 
         ApplyGravity();
 
-        // 和 PlayerMotor 相同的原理：用本帧实际位移算水平速度，喂给 Animator 的 Speed 参数
+        // 和 PlayerMotor 相同的原理：用本帧实际位移算水平速度，喂给 Animator 的 Speed / MoveX / MoveY
         Vector3 delta = transform.position - posBefore;
-        float planarSpeed = new Vector3(delta.x, 0f, delta.z).magnitude / Time.deltaTime;
-        SetAnimatorSpeed(planarSpeed);
+        Vector3 planarDelta = new Vector3(delta.x, 0f, delta.z);
+        float planarSpeed = planarDelta.magnitude / Time.deltaTime;
+
+        float moveX = 0f;
+        float moveY = 0f;
+        if (planarDelta.sqrMagnitude > 0.000001f && planarSpeed > 0.05f)
+        {
+            Vector3 localDir = transform.InverseTransformDirection(planarDelta.normalized);
+            float tier = Mathf.Clamp01(planarSpeed / Mathf.Max(0.01f, chaseSpeed));
+            moveX = localDir.x * tier;
+            moveY = localDir.z * tier;
+        }
+        SetAnimatorLocomotion(planarSpeed, moveX, moveY);
     }
 
     // ---------------- Patrol 巡逻 ----------------
@@ -323,11 +336,18 @@ public class BotController : MonoBehaviour
         SetAnimatorSpeed(0f);
     }
 
-    // 和 PlayerMotor 同一套：平滑地把速度写进 Animator 参数
+    // 和 PlayerMotor 同一套：平滑地把速度/方向写进 Animator 参数
     private void SetAnimatorSpeed(float targetSpeed)
     {
+        SetAnimatorLocomotion(targetSpeed, 0f, 0f);
+    }
+
+    private void SetAnimatorLocomotion(float targetSpeed, float targetMoveX, float targetMoveY)
+    {
         if (animator == null) return;
-        float current = animator.GetFloat(speedParameter);
-        animator.SetFloat(speedParameter, Mathf.Lerp(current, targetSpeed, animDamp * Time.deltaTime));
+        float t = animDamp * Time.deltaTime;
+        animator.SetFloat(speedParameter, Mathf.Lerp(animator.GetFloat(speedParameter), targetSpeed, t));
+        animator.SetFloat(moveXParameter, Mathf.Lerp(animator.GetFloat(moveXParameter), targetMoveX, t));
+        animator.SetFloat(moveYParameter, Mathf.Lerp(animator.GetFloat(moveYParameter), targetMoveY, t));
     }
 }
