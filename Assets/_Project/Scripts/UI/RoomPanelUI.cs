@@ -13,23 +13,14 @@ using Shared;                       // Constants（总人数显示）
 // 挂载：大厅 Canvas（常驻物体）上——千万别挂在 RoomPanel 自己身上（它会隐藏，脚本会跟着停）
 public class RoomPanelUI : MonoBehaviour
 {
-    // 单个槽位的引用（手动摆 10 个，按顺序拖进 slots）
-    [Serializable]
-    public class RoomSlotUI
-    {
-        public Button button;        // 槽位本体（可点击）
-        public Image avatarImage;    // 【阶段4-G】这个位置玩家的头像（可留空 → 只是没有头像框）
-        public TMP_Text nameText;    // 玩家名 / "空位"
-        public TMP_Text stateText;   // "已准备 / 未准备 / 点我换到这里"
-    }
-
     [Header("引用")]
     public GameObject roomPanel;      // 面板根物体
     public LobbyUI lobbyUI;           // 进出房间时切换大厅面板显隐
-    public RoomSlotUI[] slots;        // 10 个槽位：0~4 = A队1~5号位，5~9 = B队1~5号位
+    public RoomSlotView[] slots;      // 10 个槽位：0~4 = A队1~5号位，5~9 = B队1~5号位
     public AvatarLibrary avatarLibrary;   // 【阶段4-G】预设头像库（把各人头像显示到槽位上）
     public TMP_Text playersText;      // 提示语（人数/准备情况/下一步做什么）
-    public TMP_Text roomCodeText;     // 【阶段3-房间码】显示本机房间码（发给朋友即可加入）
+    public TMP_Text roomCodeText;     // 【阶段3-房间码】只显示房间码本身（标题/说明由界面静态文字负责）
+    public Button copyRoomCodeButton; // 【7.2】复制房间码
     public Button readyButton;        // 准备/取消准备
     public TMP_Text readyButtonLabel; // 按钮上的文字
     public Button startButton;        // 【仅房主】全员准备后出现
@@ -45,6 +36,11 @@ public class RoomPanelUI : MonoBehaviour
         if (readyButton != null) readyButton.onClick.AddListener(ToggleReady);
         if (startButton != null) { startButton.onClick.AddListener(StartGame); startButton.gameObject.SetActive(false); }
         if (leaveButton != null) leaveButton.onClick.AddListener(LeaveRoom);
+        if (copyRoomCodeButton != null)
+        {
+            copyRoomCodeButton.onClick.AddListener(CopyRoomCode);
+            copyRoomCodeButton.interactable = false;
+        }
         if (inviteButton != null) inviteButton.interactable = false;   // 旧按钮：阶段3才开放（建议直接用右侧好友栏代替）
 
         // 槽位点击：点击第 i 个槽位 → 尝试换到该位置（任意队空位都行，服务器还会再校验一次）
@@ -120,8 +116,15 @@ public class RoomPanelUI : MonoBehaviour
         {
             for (int i = 0; i < slots.Length && i < 10; i++)
             {
-                RoomSlotUI slot = slots[i];
+                RoomSlotView slot = slots[i];
                 if (slot == null || slot.button == null) continue;
+
+                if (slot.metaText != null)
+                {
+                    string team = (i < 5) ? "TEAM A" : "TEAM B";
+                    int seat = (i % 5) + 1;
+                    slot.metaText.text = team + " · SLOT " + seat.ToString("00");
+                }
 
                 RoomPlayer occupant = bySlot[i];
                 if (occupant != null)
@@ -143,6 +146,12 @@ public class RoomPanelUI : MonoBehaviour
                         slot.avatarImage.enabled = (avatar != null);
                     }
 
+                    // 【7.2】槽位叠层
+                    if (slot.emptyOverlay != null) slot.emptyOverlay.SetActive(false);
+                    if (slot.readyOverlay != null) slot.readyOverlay.SetActive(occupant.readyToBegin);
+                    if (slot.hostOverlay != null) slot.hostOverlay.SetActive(occupant.isRoomOwner);
+                    if (slot.youTag != null) slot.youTag.SetActive(occupant.isLocalPlayer);
+
                     slot.button.interactable = false;   // 有人的位置不响应点击（交换请求以后再做）
                 }
                 else
@@ -150,38 +159,41 @@ public class RoomPanelUI : MonoBehaviour
                     if (slot.nameText != null) slot.nameText.text = "空位";
                     if (slot.stateText != null) slot.stateText.text = "点我换到这里";
                     if (slot.avatarImage != null) slot.avatarImage.enabled = false;   // 空位没有头像
+
+                    if (slot.emptyOverlay != null) slot.emptyOverlay.SetActive(true);
+                    if (slot.readyOverlay != null) slot.readyOverlay.SetActive(false);
+                    if (slot.hostOverlay != null) slot.hostOverlay.SetActive(false);
+                    if (slot.youTag != null) slot.youTag.SetActive(false);
+
                     slot.button.interactable = (myRoomPlayer != null);   // 空位都能点（跨队换位）
                 }
             }
         }
 
-        // 3. 提示语
+        // 3. 提示语（7.2 的 InfoStrip 是 66 高的横条，这里压成一行显示）
         if (playersText != null)
         {
-            string text = "房间玩家：" + count + " / " + Constants.TotalSlotCount + "\n\n";
+            string text = "房间玩家 " + count + " / " + Constants.TotalSlotCount
+                        + "　·　已准备 " + readyCount + " / " + count;
             if (count < room.minPlayers)
-                text += "至少 " + room.minPlayers + " 人、全员准备后由房主开始。";
-            else if (!allReady)   // 【修复】同上：客户端不能用 room.allPlayersReady（不会同步）
-                text += "等待全员准备…（已准备 " + readyCount + " / " + count + "）";
+                text += "　·　至少 " + room.minPlayers + " 人";
+            else if (!allReady)
+                text += "　·　等待全员准备";
             else
             {
-                bool iAmOwner = myRoomPlayer != null && myRoomPlayer.isRoomOwner;   // 【阶段3】房主是身份标记，不再看谁跑服务器
-                text += iAmOwner ? "全员已准备——点“开始游戏”进入对局！"
-                                 : "全员已准备，等待房主开始…";
+                bool iAmOwner = myRoomPlayer != null && myRoomPlayer.isRoomOwner;
+                text += iAmOwner ? "　·　可以开始游戏" : "　·　等待房主开始";
             }
-            text += "\n（点击任意空位可以换过去，换位会同时改变你的队伍）";
+            text += "　·　点击空位可换位";
             playersText.text = text;
         }
 
-        // 【阶段3-房间码】显示本机房间码：服务器登记成功后经 SyncVar 下发；
-        // 还没拿到时显示"生成中…"—— 只是显示，绝不阻塞进房或开局
+        // 【阶段3-房间码】房间码 chip 只显示码本身；标题/说明由界面静态文字负责
+        string roomCode = (myRoomPlayer != null) ? myRoomPlayer.roomCode : null;
         if (roomCodeText != null)
-        {
-            string code = (myRoomPlayer != null) ? myRoomPlayer.roomCode : null;
-            roomCodeText.text = string.IsNullOrEmpty(code)
-                ? "房间码：生成中…"
-                : "房间码：" + code + "　（发给朋友即可加入）";
-        }
+            roomCodeText.text = string.IsNullOrEmpty(roomCode) ? "生成中…" : roomCode;
+        if (copyRoomCodeButton != null)
+            copyRoomCodeButton.interactable = !string.IsNullOrEmpty(roomCode);
 
         // 4. 准备按钮：文字跟着自己的状态走
         if (readyButton != null)
@@ -233,6 +245,17 @@ public class RoomPanelUI : MonoBehaviour
     {
         RoomPlayer myRoomPlayer = FindMyRoomPlayer();
         if (myRoomPlayer != null) myRoomPlayer.CmdChangeReadyState(!myRoomPlayer.readyToBegin);
+    }
+
+    // 【7.2】复制房间码（房间码 chip 右侧的 icon_copy 按钮）
+    private void CopyRoomCode()
+    {
+        RoomPlayer mine = FindMyRoomPlayer();
+        string code = mine != null ? mine.roomCode : null;
+        if (string.IsNullOrEmpty(code)) return;
+
+        GUIUtility.systemCopyBuffer = code;
+        Debug.Log("[房间] 房间码已复制：" + code);
     }
 
     // 离开房间：主机 = 解散；客机 = 自己退出回大厅
