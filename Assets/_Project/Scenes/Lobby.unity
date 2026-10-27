@@ -14852,6 +14852,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0199f4c87c0b4ae4d99b6d6e904de67a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  system: {fileID: 0}
+  statusText: {fileID: 0}
+  xbotButton: {fileID: 0}
+  rifleGirlButton: {fileID: 0}
+  keqingButton: {fileID: 0}
+  ls2Button: {fileID: 0}
+  zhuangButton: {fileID: 0}
 --- !u!114 &924785796
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17920,6 +17927,9 @@ MonoBehaviour:
   statusText: {fileID: 22957572}
   authScreen: {fileID: 1102021131}
   profileUI: {fileID: 1102021132}
+  characterPanel: {fileID: 0}
+  characterSelectButton: {fileID: 0}
+  characterSelectUI: {fileID: 0}
   quitButton: {fileID: 1464600055}
 --- !u!114 &1102021128
 MonoBehaviour:

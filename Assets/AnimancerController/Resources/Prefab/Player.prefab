@@ -397,7 +397,7 @@ PrefabInstance:
     - target: {fileID: 919132149155446097, guid: f44f3849f93f0244e80cad9819f38cb4,
         type: 3}
       propertyPath: m_Name
-      value: Player 1
+      value: Player
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: f44f3849f93f0244e80cad9819f38cb4,
         type: 3}
@@ -801,13 +801,8 @@ MonoBehaviour:
     m_Bits: 64
   groundDetectedOffset: -0.06
   groundRadius: 0.12
-  applyFullRootMotion: 1
   moveSpeedMult: 1
-  whatIsEnemy:
-    serializedVersion: 2
-    m_Bits: 0
   playerSO: {fileID: 11400000, guid: 99e2ea24fd0ddcb46a2bf3f325a404fc, type: 2}
-  animancer: {fileID: 9154149627376371769}
 --- !u!114 &9154149627376371769
 MonoBehaviour:
   m_ObjectHideFlags: 0

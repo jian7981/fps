@@ -41,6 +41,14 @@ public class LobbyUI : MonoBehaviour
              "没配账号服务（-lobbyserver）时主菜单那张个人卡不显示，所以这里也打不开")]
     public ProfileUI profileUI;
 
+    [Header("【阶段5】角色选择界面")]
+    [Tooltip("角色选择面板（整屏；中间留空给 3D 角色）")]
+    public GameObject characterPanel;
+    [Tooltip("主菜单上的「角色选择」按钮")]
+    public Button characterSelectButton;
+    [Tooltip("角色选择界面控制器（脚本挂在 Canvas 上；留空会自动查找）")]
+    public CharacterSelectUI characterSelectUI;
+
     [Header("【新功能】退出游戏")]
     public Button quitButton;                 // 主界面上的"退出游戏"按钮
 
@@ -71,6 +79,11 @@ public class LobbyUI : MonoBehaviour
         if (roomListButton != null) roomListButton.onClick.AddListener(OnRoomListClicked);       // 【阶段3-D】打开房间列表
         settingsButton.onClick.AddListener(OpenSettingsPanel);    // 【新增】点"设置" → 打开设置界面
         if (quitButton != null) quitButton.onClick.AddListener(QuitGame);   // 【新功能】退出游戏
+
+        // 【阶段5】角色选择：主菜单按钮 → 打开角色选择面板
+        if (characterSelectButton != null) characterSelectButton.onClick.AddListener(OpenCharacterPanel);
+        else Debug.LogWarning("[大厅] 主菜单「角色选择」按钮未挂载（characterSelectButton）");
+        if (characterSelectUI == null) characterSelectUI = FindObjectOfType<CharacterSelectUI>(true);
 
         // 2. 【阶段3-F】登录界面只在**还没登录**的时候拦一道。
         //    【Bug 修复】原来靠"是否从对局返回"的跨场景标记来判断 —— 但那个标记只在"设置面板 → 退出对局"
@@ -154,6 +167,7 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(true);
         teamPanel.SetActive(false);
         settingsPanel.SetActive(false);
+        if (characterPanel != null) characterPanel.SetActive(false);
         if (profileUI != null) profileUI.Close();   // 【阶段4-G】个人主页也是"大厅里的一个面板"，切面板时要一起让位
     }
 
@@ -164,6 +178,7 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(false);
         teamPanel.SetActive(true);
         settingsPanel.SetActive(false);
+        if (characterPanel != null) characterPanel.SetActive(false);
         if (profileUI != null) profileUI.Close();
     }
 
@@ -174,7 +189,31 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(false);
         teamPanel.SetActive(false);
         settingsPanel.SetActive(true);
+        if (characterPanel != null) characterPanel.SetActive(false);
         if (profileUI != null) profileUI.Close();
+    }
+
+    // 【阶段5】打开角色选择界面：三栏面板，中间留空给 3D 角色
+    public void OpenCharacterPanel()
+    {
+        if (characterPanel == null)
+        {
+            Debug.LogWarning("[大厅] 角色选择面板未挂载（characterPanel）");
+            ShowStatus("角色选择界面未挂载");
+            return;
+        }
+
+        mainMenu.SetActive(false);
+        mapPanel.SetActive(false);
+        teamPanel.SetActive(false);
+        settingsPanel.SetActive(false);
+        characterPanel.SetActive(true);
+        if (profileUI != null) profileUI.Close();
+        if (roomListPanel != null) roomListPanel.Hide();
+
+        // 先激活再刷新：列表行在隐藏状态下布局尺寸为 0，激活后强制重算一次
+        if (characterSelectUI != null) characterSelectUI.Refresh();
+        else Debug.LogWarning("[大厅] CharacterSelectUI 未挂载 → 角色选择面板没有内容");
     }
 
     // 【阶段4-G】打开个人主页（主菜单那张个人卡的点击入口）
@@ -196,6 +235,7 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(false);
         teamPanel.SetActive(false);
         settingsPanel.SetActive(false);
+        if (characterPanel != null) characterPanel.SetActive(false);
         if (profileUI != null) profileUI.Close();
     }
 
@@ -206,6 +246,7 @@ public class LobbyUI : MonoBehaviour
         mapPanel.SetActive(false);
         teamPanel.SetActive(false);
         settingsPanel.SetActive(false);
+        if (characterPanel != null) characterPanel.SetActive(false);
         if (profileUI != null) profileUI.Close();   // 【阶段4-G】个人主页也在"大厅面板"里，必须一起关
 
         // 【Bug 修复】房间列表面板也要关 —— 它自己管显隐，不在上面那四个里；
