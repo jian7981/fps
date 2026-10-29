@@ -11,6 +11,8 @@ public class PingDisplayUI : MonoBehaviour
 {
     [Header("引用")]
     public TMP_Text pingText;        // 显示"延迟 xx ms"的文本
+    [Tooltip("可选：整个延迟面板（背景+图标+文字）。脚本建议挂在 MatchCanvas 上，pingPanel 作为其子物体，单机时整块隐藏")]
+    public GameObject pingPanel;
 
     [Header("参数")]
     public float refreshInterval = 0.5f;   // 刷新间隔（秒）
@@ -25,6 +27,7 @@ public class PingDisplayUI : MonoBehaviour
             return;
         }
         pingText.enabled = false;   // 只关文字组件（物体保持激活 → 本脚本照常运行）
+        if (pingPanel != null) pingPanel.SetActive(false);
     }
 
     private void Update()
@@ -37,10 +40,12 @@ public class PingDisplayUI : MonoBehaviour
         if (!NetworkClient.active)
         {
             if (pingText.enabled) pingText.enabled = false;
+            if (pingPanel != null && pingPanel.activeSelf) pingPanel.SetActive(false);
             return;
         }
 
         if (!pingText.enabled) pingText.enabled = true;   // 联机中 → 显示文字
+        if (pingPanel != null && !pingPanel.activeSelf) pingPanel.SetActive(true);
 
         int ms = Mathf.RoundToInt((float)(NetworkTime.rtt * 1000.0));   // rtt 单位是秒，换成毫秒
         pingText.text = "延迟 " + ms + " ms";

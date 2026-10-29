@@ -41,6 +41,8 @@ public class WeaponController : NetworkBehaviour
 
     // ---------- 对外只读状态（HUD 以后读这些）----------
     public WeaponData CurrentWeapon => (weapons != null && weapons.Length > 0) ? weapons[currentIndex] : null;
+    public int CurrentWeaponIndex => currentIndex;
+    public int WeaponCount => weapons != null ? weapons.Length : 0;
 
     // 【阶段4-A3】按下标取武器数据（越界 / 没配 → null）
     // 用途：远端枪声要按"开火的那一把"取音效；远端玩家对象上的 WeaponController 副本与主机是同一套资产

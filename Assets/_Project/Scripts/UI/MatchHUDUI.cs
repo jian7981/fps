@@ -9,14 +9,16 @@ public class MatchHUDUI : MonoBehaviour
     [Header("引用")]
     public MatchState matchState;    // 拖 GameManager 物体即可（Unity 会自动认它身上的 MatchState）
     public MatchRules matchRules;    // 同上，拖 GameManager 物体
-    public TMP_Text scoreText;       // 大比分文字
+    public TMP_Text scoreText;       // 旧版合并比分（可留空）
+    public TMP_Text scoreAText;      // 【7.3】A 队比分
+    public TMP_Text scoreBText;      // 【7.3】B 队比分
     public TMP_Text hintText;        // "先到 X 杀获胜"
 
     private void Start()
     {
-        if (matchState == null || scoreText == null)
+        if (matchState == null || (scoreText == null && scoreAText == null && scoreBText == null))
         {
-            Debug.LogError("MatchHUDUI：matchState / scoreText 未赋值");
+            Debug.LogError("MatchHUDUI：matchState 或比分文字未赋值");
             enabled = false;
             return;
         }
@@ -41,7 +43,11 @@ public class MatchHUDUI : MonoBehaviour
     // 比分变化：重画比分条
     private void Refresh()
     {
-        if (scoreText == null || matchState == null) return;
-        scoreText.text = "A队 " + matchState.TeamAScore + " : " + matchState.TeamBScore + " B队";
+        if (matchState == null) return;
+
+        if (scoreAText != null) scoreAText.text = matchState.TeamAScore.ToString();
+        if (scoreBText != null) scoreBText.text = matchState.TeamBScore.ToString();
+        if (scoreText != null)
+            scoreText.text = "A队 " + matchState.TeamAScore + " : " + matchState.TeamBScore + " B队";
     }
 }
