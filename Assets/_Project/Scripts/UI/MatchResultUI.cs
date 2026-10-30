@@ -16,7 +16,11 @@ public class MatchResultUI : MonoBehaviour
     public MatchState matchState;    // 拖 GameManager 物体
     public GameObject resultPanel;   // 结算面板根物体
     public TMP_Text titleText;       // 胜利！/ 失败…
-    public TMP_Text scoreText;       // 最终比分
+    public GameObject victoryRoot;   // 【7.4】胜利装饰（burst / win tag），可留空
+    public GameObject defeatRoot;    // 【7.4】失败装饰（defeat card），可留空
+    public TMP_Text scoreText;       // 旧版合并比分（可留空）
+    public TMP_Text scoreAText;      // 【7.4】A 队比分
+    public TMP_Text scoreBText;      // 【7.4】B 队比分
     public Button returnButton;      // 【返回大厅】
     public Button returnRoomButton;          // 【阶段2.4-C】返回房间（联机时显示；每人自己点）
     public TMP_Text returnRoomButtonLabel;   // 返回房间按钮上的文字（可选）
@@ -31,6 +35,8 @@ public class MatchResultUI : MonoBehaviour
     public TMP_Text rewardText;
     [Tooltip("小字状态：\"经验结算中…\" / \"本局不计经验…\" / 失败原因")]
     public TMP_Text rewardStatusText;
+    [Tooltip("【7.4】奖励卡里的经验条（Image Type = Filled / Horizontal / Left）")]
+    public Image rewardExpFill;
     [Tooltip("等这么久还没收到经验结果 → 判为本局不计经验（人机局 / 未登录）")]
     public float rewardTimeout = 6f;
 
@@ -42,12 +48,18 @@ public class MatchResultUI : MonoBehaviour
     private Health localHealth;
     private Coroutine rewardTimeoutRoutine;
 
+    // 【7.4】本机在战绩表里的显示名：登录昵称，或未登录时的 "玩家 N"
+    private string localDisplayName;
+
     private void Start()
     {
         if (!CheckRefs()) return;
 
         resultPanel.SetActive(false);                      // 开局先藏起来
         SetRewardVisible(false);                           // 【修复】经验文本在 MatchCanvas 下、不在 ResultPanel 里 → 必须单独藏
+        if (victoryRoot != null) victoryRoot.SetActive(false);
+        if (defeatRoot != null) defeatRoot.SetActive(false);
+        if (rewardExpFill != null) rewardExpFill.fillAmount = 0f;
         returnButton.onClick.AddListener(ReturnToLobby);   // 绑定按钮（代码绑，OnClick 留空）
 
         // 【阶段2.4-C】返回房间：只有联机时显示（单机没有"房间"概念）
@@ -66,7 +78,8 @@ public class MatchResultUI : MonoBehaviour
         if (matchState == null) { Debug.LogError("MatchResultUI：matchState 未赋值"); return false; }
         if (resultPanel == null) { Debug.LogError("MatchResultUI：resultPanel 未赋值"); return false; }
         if (titleText == null) { Debug.LogError("MatchResultUI：titleText 未赋值"); return false; }
-        if (scoreText == null) { Debug.LogError("MatchResultUI：scoreText 未赋值"); return false; }
+        if (scoreText == null && scoreAText == null && scoreBText == null)
+        { Debug.LogError("MatchResultUI：scoreText / scoreAText / scoreBText 至少赋值一个"); return false; }
         if (returnButton == null) { Debug.LogError("MatchResultUI：returnButton 未赋值"); return false; }
         if (leftColumn == null) { Debug.LogError("MatchResultUI：leftColumn 未赋值"); return false; }
         if (rightColumn == null) { Debug.LogError("MatchResultUI：rightColumn 未赋值"); return false; }
@@ -124,13 +137,25 @@ public class MatchResultUI : MonoBehaviour
             myHealth = myPlayer.GetComponentInChildren<Health>();
             if (myHealth != null) myTeam = myHealth.TeamId;
         }
-        titleText.text = (winnerTeamId == myTeam) ? "胜利！" : "失败…";
+
+        bool won = (winnerTeamId == myTeam);
+        titleText.text = won ? "胜利！" : "失败…";
+        if (victoryRoot != null) victoryRoot.SetActive(won);
+        if (defeatRoot != null) defeatRoot.SetActive(!won);
+
+        // 【7.4】本机战绩行高亮：登录昵称，或未登录时的 "玩家 N"
+        localDisplayName = !string.IsNullOrEmpty(AuthService.CurrentNickname)
+            ? AuthService.CurrentNickname
+            : (myHealth != null && myHealth.DisplayIndex > 0 ? "玩家 " + myHealth.DisplayIndex : null);
 
         // 【阶段4-H】经验结算：结果由服务器稍后 TargetRpc 发过来（这里先把状态挂好）
         BeginReward(myHealth);
 
         // 2. 最终比分
-        scoreText.text = "A队 " + matchState.TeamAScore + " : " + matchState.TeamBScore + " B队";
+        if (scoreAText != null) scoreAText.text = matchState.TeamAScore.ToString();
+        if (scoreBText != null) scoreBText.text = matchState.TeamBScore.ToString();
+        if (scoreText != null)
+            scoreText.text = "A队 " + matchState.TeamAScore + " : " + matchState.TeamBScore + " B队";
 
         // 3. 双方战绩表
         FillTeam(0, leftRows);
@@ -219,6 +244,11 @@ public class MatchResultUI : MonoBehaviour
         StopRewardTimeout();
         SetRewardStatus("");
 
+        if (rewardExpFill != null)
+            rewardExpFill.fillAmount = (reward.expToNext > 0)
+                ? Mathf.Clamp01((float)reward.exp / reward.expToNext)
+                : 1f;
+
         if (rewardText == null) return;
 
         // 同一局重复上报（反复点返回、超时重发）→ 后端幂等拦下，这里明确告诉玩家没重复加
@@ -274,10 +304,12 @@ public class MatchResultUI : MonoBehaviour
             {
                 CombatantStats s = teamStats[i];
                 rows[i].Set(s.displayName, s.kills, s.deaths, s.assists);
+                rows[i].SetHighlight(!string.IsNullOrEmpty(localDisplayName) && s.displayName == localDisplayName);
             }
             else
             {
                 rows[i].SetEmpty();
+                rows[i].SetHighlight(false);
             }
         }
     }

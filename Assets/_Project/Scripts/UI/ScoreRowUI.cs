@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.UI;   // Image
 using TMPro;
 
 // ============ 战绩表的一行（名字 + 击杀 + 死亡 + 助攻）============
@@ -10,6 +11,11 @@ public class ScoreRowUI : MonoBehaviour
     public TMP_Text killsText;     // 击杀
     public TMP_Text deathsText;    // 死亡
     public TMP_Text assistsText;   // 助攻
+
+    [Header("可选：本机玩家高亮")]
+    public Image background;          // 行底图
+    public Sprite normalSprite;       // hud_scoreboard_row
+    public Sprite meSprite;           // hud_scoreboard_row_me
 
     // 填入一个人的数据
     public void Set(string displayName, int kills, int deaths, int assists)
@@ -27,5 +33,12 @@ public class ScoreRowUI : MonoBehaviour
         killsText.text = "-";
         deathsText.text = "-";
         assistsText.text = "-";
+    }
+
+    // 【HUD 10 人记分板】本机玩家高亮
+    public void SetHighlight(bool isMe)
+    {
+        if (background == null || normalSprite == null || meSprite == null) return;
+        background.sprite = isMe ? meSprite : normalSprite;
     }
 }

@@ -4,6 +4,7 @@ using System.Collections.Generic; // List<>
 using UnityEngine;
 using UnityEngine.UI;          // Image
 using TMPro;                   // TextMeshProUGUI
+using Mirror;                  // NetworkServer / NetworkClient（10 人记分板请求）
 
 // ============ 玩家 HUD（表现层）============
 // 职责：订阅玩家身上"已经广播出来的事件"，把结果画到屏幕上
@@ -62,8 +63,15 @@ public class HUDManager : MonoBehaviour
 
     [Header("记分板（按住显示）")]
     [SerializeField] private GameObject scoreboardPanel;
-    [SerializeField] private TMP_Text scoreboardText;
+    [SerializeField] private TMP_Text scoreboardText;   // 旧版本机文本（可留空）
     [SerializeField] private KeyCode scoreboardKey = KeyCode.Tab;
+
+    [Header("10 人记分板（可选）")]
+    [SerializeField] private GameObject scoreboardRowPrefab;    // HudScoreRow.prefab（挂 ScoreRowUI）
+    [SerializeField] private Transform scoreboardTeamAContent;  // A 队 5 行容器（Vertical Layout Group）
+    [SerializeField] private Transform scoreboardTeamBContent;  // B 队 5 行容器
+    [SerializeField] private TMP_Text scoreboardTeamAScoreText; // 可选：A 队比分
+    [SerializeField] private TMP_Text scoreboardTeamBScoreText; // 可选：B 队比分
 
     // ---- 本地战绩（Tab 记分板 + 【步骤1.5】结算面板共用的数据源）----
     private int myKills;
@@ -82,11 +90,25 @@ public class HUDManager : MonoBehaviour
     private Coroutine hitMarkerCoroutine;
     private readonly List<GameObject> killFeedRows = new List<GameObject>();
 
+    // 【10 人记分板】数据源 + 行缓存
+    private MatchState matchState;
+    private MatchRules matchRules;
+    private PlayerMatchActions matchActions;
+    private readonly List<ScoreRowUI> scoreRowsA = new List<ScoreRowUI>();
+    private readonly List<ScoreRowUI> scoreRowsB = new List<ScoreRowUI>();
+    private float nextScoreboardRefresh;
+    private const float ScoreboardRefreshInterval = 0.5f;
+
     private void Awake()
     {
         // Canvas 挂在玩家预制体里 → 往上找就能拿到玩家的两个数据源
         health = GetComponentInParent<Health>();
         weapons = GetComponentInParent<WeaponController>();
+
+        // 【10 人记分板】场景级数据源 + 本机玩家的网络命令入口
+        matchState = FindObjectOfType<MatchState>(true);
+        matchRules = FindObjectOfType<MatchRules>(true);
+        matchActions = GetComponentInParent<PlayerMatchActions>();
     }
 
     private void OnEnable()
@@ -107,6 +129,9 @@ public class HUDManager : MonoBehaviour
             weapons.OnHitTarget += HandleHitTarget;          // 命中目标
             weapons.OnKilled += HandleKilled;                // 【新增】击杀（真正的击杀，不含打尸体）
         }
+
+        if (matchActions != null)
+            matchActions.OnScoreboardReceived += HandleScoreboardSnapshot;
     }
 
     private void OnDisable()
@@ -127,6 +152,9 @@ public class HUDManager : MonoBehaviour
             weapons.OnKilled -= HandleKilled; // 【新增】
         }
 
+        if (matchActions != null)
+            matchActions.OnScoreboardReceived -= HandleScoreboardSnapshot;
+
         if (hitMarkerCoroutine != null)
         {
             StopCoroutine(hitMarkerCoroutine);
@@ -146,6 +174,7 @@ public class HUDManager : MonoBehaviour
         if (reloadFill != null) reloadFill.fillAmount = 1f;
         if (hitMarker != null) hitMarker.gameObject.SetActive(false);
         if (scoreboardPanel != null) scoreboardPanel.SetActive(false);
+        CreateScoreboardRows();
         if (killFeedText != null) SetAlpha(killFeedText, 0f);
     }
 
@@ -155,6 +184,14 @@ public class HUDManager : MonoBehaviour
         bool wantShow = Input.GetKey(scoreboardKey);
         if (scoreboardPanel != null && scoreboardPanel.activeSelf != wantShow)
             scoreboardPanel.SetActive(wantShow);
+
+        // 【10 人记分板】按住 Tab 期间每 0.5 秒拉一次快照（联机走 Command，单机直接读 MatchRules）
+        if (scoreboardPanel != null && scoreboardPanel.activeSelf
+            && Time.unscaledTime >= nextScoreboardRefresh)
+        {
+            nextScoreboardRefresh = Time.unscaledTime + ScoreboardRefreshInterval;
+            RequestScoreboard();
+        }
     }
 
     // ---------- 血条 / 护甲条 ----------
@@ -372,5 +409,109 @@ public class HUDManager : MonoBehaviour
     {
         if (scoreboardText == null) return;
         scoreboardText.text = $"本地战绩\n击杀：{myKills}\n死亡：{myDeaths}";
+    }
+
+    // ---------- 10 人记分板 ----------
+    private void CreateScoreboardRows()
+    {
+        if (scoreboardRowPrefab == null || scoreboardTeamAContent == null || scoreboardTeamBContent == null)
+            return;
+
+        for (int i = 0; i < 5; i++)
+        {
+            CreateScoreboardRow(scoreboardTeamAContent, scoreRowsA);
+            CreateScoreboardRow(scoreboardTeamBContent, scoreRowsB);
+        }
+    }
+
+    private void CreateScoreboardRow(Transform parent, List<ScoreRowUI> rows)
+    {
+        GameObject go = Instantiate(scoreboardRowPrefab, parent, false);
+        ScoreRowUI row = go.GetComponent<ScoreRowUI>();
+        if (row == null)
+        {
+            Debug.LogError("HUDManager：scoreboardRowPrefab 上没有 ScoreRowUI 组件");
+            Destroy(go);
+            return;
+        }
+
+        row.SetEmpty();
+        row.SetHighlight(false);
+        rows.Add(row);
+    }
+
+    // 按住 Tab 时刷新：联机走服务器快照，单机直接读 MatchRules
+    private void RequestScoreboard()
+    {
+        UpdateScoreboardTeamScores();
+
+        if (NetworkServer.active || NetworkClient.active)
+        {
+            if (matchActions != null) matchActions.CmdRequestScoreboard();
+        }
+        else if (matchRules != null)
+        {
+            HandleScoreboardSnapshot(matchRules.BuildScoreboard(null));
+        }
+    }
+
+    private void UpdateScoreboardTeamScores()
+    {
+        if (matchState == null) matchState = FindObjectOfType<MatchState>(true);
+        if (matchState == null) return;
+
+        if (scoreboardTeamAScoreText != null) scoreboardTeamAScoreText.text = matchState.TeamAScore.ToString();
+        if (scoreboardTeamBScoreText != null) scoreboardTeamBScoreText.text = matchState.TeamBScore.ToString();
+    }
+
+    // 收到快照（联机 TargetRpc / 单机本地）→ 填 5 + 5 行
+    private void HandleScoreboardSnapshot(List<ScoreboardEntry> entries)
+    {
+        if (entries == null) return;
+
+        entries.Sort((a, b) =>
+        {
+            if (a.teamId != b.teamId) return a.teamId - b.teamId;
+            return b.kills - a.kills;
+        });
+
+        int aIndex = 0;
+        int bIndex = 0;
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            ScoreboardEntry e = entries[i];
+            ScoreRowUI row = null;
+
+            if (e.teamId == 0)
+            {
+                if (aIndex < scoreRowsA.Count) row = scoreRowsA[aIndex];
+                aIndex++;
+            }
+            else
+            {
+                if (bIndex < scoreRowsB.Count) row = scoreRowsB[bIndex];
+                bIndex++;
+            }
+
+            if (row != null)
+            {
+                row.Set(e.displayName, e.kills, e.deaths, e.assists);
+                row.SetHighlight(e.isLocal);
+            }
+        }
+
+        for (int i = aIndex; i < scoreRowsA.Count; i++)
+        {
+            scoreRowsA[i].SetEmpty();
+            scoreRowsA[i].SetHighlight(false);
+        }
+        for (int i = bIndex; i < scoreRowsB.Count; i++)
+        {
+            scoreRowsB[i].SetEmpty();
+            scoreRowsB[i].SetHighlight(false);
+        }
+
+        UpdateScoreboardTeamScores();
     }
 }

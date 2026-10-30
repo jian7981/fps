@@ -52,6 +52,8 @@ public class Health : NetworkBehaviour   // 【阶段2.2】MonoBehaviour → Net
     public int CurrentArmor => currentArmor;
     public bool IsDead => isDead;
     public int TeamId => teamId;
+    // 【7.4】结算表本机高亮：进房顺序（1 = 房主）；未登录时注册名是 "玩家 N"
+    public int DisplayIndex => displayIndex;
 
     // ---------- 事件（接口没变，订阅方零改动）----------
     public event Action<int, GameObject> OnDamaged;   // (伤害量, 攻击者) —— 联机下只在服务器触发（计分用）

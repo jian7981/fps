@@ -1,5 +1,19 @@
-﻿﻿﻿﻿using System.Collections.Generic;   // Dictionary
+﻿﻿﻿﻿using System;                       // [Serializable]
+using System.Collections.Generic;   // Dictionary / List
 using UnityEngine;
+using Mirror;                       // NetworkConnectionToClient
+
+// 【HUD 10 人记分板】一条可显示的战绩数据
+[Serializable]
+public struct ScoreboardEntry
+{
+    public string displayName;
+    public int teamId;
+    public int kills;
+    public int deaths;
+    public int assists;
+    public bool isLocal;
+}
 
 // ============ 对局规则：先到目标击杀数获胜 + 全员战绩记账 ============
 // 挂载：map1 场景里挂 GameManager 脚本的那个物体上（和 GameManager / MatchState 同物体）
@@ -112,6 +126,57 @@ public class MatchRules : MonoBehaviour
             Debug.Log("[对局] " + ((scoringTeam == 0) ? "A队" : "B队")
                 + " 先到 " + targetKills + " 杀，获胜！");
         }
+    }
+
+    // 【HUD 10 人记分板】按请求者生成一份当前战绩快照
+    // requester != null = 联机客户端请求：用 connectionToClient 标记"我"；
+    // requester == null = 单机本地：用 GameManager.CurrentPlayer 标记"我"。
+    public List<ScoreboardEntry> BuildScoreboard(NetworkConnectionToClient requester)
+    {
+        List<ScoreboardEntry> entries = new List<ScoreboardEntry>();
+
+        GameObject localPlayer = null;
+        if (requester == null)
+        {
+            if (NetworkClient.localPlayer != null)
+                localPlayer = NetworkClient.localPlayer.gameObject;
+            else
+            {
+                GameManager gm = FindObjectOfType<GameManager>();
+                if (gm != null) localPlayer = gm.CurrentPlayer;
+            }
+        }
+
+        foreach (KeyValuePair<Health, CombatantStats> pair in statsByHealth)
+        {
+            Health health = pair.Key;
+            CombatantStats s = pair.Value;
+            if (health == null || s == null) continue;
+
+            bool isLocal = false;
+            if (requester != null)
+                isLocal = (health.connectionToClient == requester);
+            else if (localPlayer != null)
+                isLocal = (health.gameObject == localPlayer || health.transform.IsChildOf(localPlayer.transform));
+
+            ScoreboardEntry entry = new ScoreboardEntry();
+            entry.displayName = s.displayName;
+            entry.teamId = s.teamId;
+            entry.kills = s.kills;
+            entry.deaths = s.deaths;
+            entry.assists = s.assists;
+            entry.isLocal = isLocal;
+            entries.Add(entry);
+        }
+
+        // 队伍优先，再按击杀数从高到低（HUD 每队固定 5 行）
+        entries.Sort((a, b) =>
+        {
+            if (a.teamId != b.teamId) return a.teamId - b.teamId;
+            return b.kills - a.kills;
+        });
+
+        return entries;
     }
 
     // ==================== 【阶段4】对局结束：把战绩写进账号 ====================
