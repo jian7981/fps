@@ -19,6 +19,13 @@ public class RoomListPanelUI : MonoBehaviour
         public TMP_Text codeText;       // 房间码（例：UVS7）
         public TMP_Text infoText;       // 人数 + 状态（例：2/4 人 · 可加入）
         public Button joinButton;       // 加入按钮（不可加入的房间置灰）
+
+        [Header("【7.5】状态 chip（可选）")]
+        public Image statusChip;
+        public Sprite idleChipSprite;      // chip_neutral
+        public Sprite joinableChipSprite;  // chip_green
+        public Sprite fullChipSprite;      // chip_yellow
+        public Sprite inGameChipSprite;    // chip_red
     }
 
     [Header("引用")]
@@ -129,6 +136,12 @@ public class RoomListPanelUI : MonoBehaviour
             if (row.infoText != null)
                 row.infoText.text = room.players + "/" + room.maxPlayers + " 人 · " + StateText(room);
 
+            if (row.statusChip != null)
+            {
+                Sprite chip = StateChip(room, row);
+                if (chip != null) row.statusChip.sprite = chip;
+            }
+
             if (row.joinButton != null)
             {
                 row.joinButton.onClick.RemoveAllListeners();   // 行会被反复填充，先清旧的监听避免叠加
@@ -144,6 +157,14 @@ public class RoomListPanelUI : MonoBehaviour
         if (r.inGame) return "对局中";
         if (r.players >= r.maxPlayers) return "已满";
         return (r.players == 0) ? "空闲" : "可加入";
+    }
+
+    // 【7.5】状态 chip 底图
+    private static Sprite StateChip(RoomInfo r, RoomRow row)
+    {
+        if (r.inGame) return row.inGameChipSprite;
+        if (r.players >= r.maxPlayers) return row.fullChipSprite;
+        return (r.players == 0) ? row.idleChipSprite : row.joinableChipSprite;
     }
 
     // 加入：地址已经在列表里拿到了，直接连（不用像"输房间码"那样再查一次）

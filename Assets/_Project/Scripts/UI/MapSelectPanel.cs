@@ -1,55 +1,92 @@
-﻿using UnityEngine;
+using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.UI;
-using TMPro;    // TextMeshProUGUI
-using Shared;   // Constants
+using TMPro;
 
-// ============ 地图选择界面 ============
-// 职责：点地图按钮 → 告诉 LobbyManager 选了哪张图；点返回 → 回到大厅主界面
-// 挂载：挂在 MapPanel 上
+// ============ 【7.5】地图选择界面（数据驱动）============
+// 所有地图都写在 MapCatalog.asset 的 maps 数组里；本脚本按数据生成地图卡片。
+// 以后加地图：只加 MapCatalog 的一条数据 + 把场景加进 Build Settings，不用改代码/UI。
+// 挂载：MapPanel 上；卡片容器和卡片 prefab 在 Inspector 里拖。
 public class MapSelectPanel : MonoBehaviour
 {
-    [Header("引用")]
-    public LobbyUI lobbyUI;              // 返回时用它切回主界面
-    public LobbyManager lobbyManager;    // 选图时把结果记在它身上
+    [Header("数据（新增地图只改这个资产）")]
+    public MapCatalog mapCatalog;
 
     [Header("UI")]
-    public Button map1Button;            // 【地图1】按钮（以后加地图就再加按钮）
-    public Button backButton;            // 【返回】按钮
-    public TextMeshProUGUI selectedMapText;   // 显示"当前已选：xxx"
+    public Transform mapCardsContent;      // 卡片容器（挂 Grid Layout Group）
+    public MapCardUI mapCardPrefab;        // 地图卡片预制体（挂 MapCardUI）
+    public TMP_Text selectedMapText;       // "当前已选：xxx"
+    public Button backButton;              // 返回大厅
+
+    [Header("引用")]
+    public LobbyUI lobbyUI;
+    public LobbyManager lobbyManager;
+
+    private readonly List<MapCardUI> cards = new List<MapCardUI>();
 
     private void Start()
     {
         if (!CheckRefs()) return;
-
-        // 1. 绑定按钮：地图1 用的是 Constants 里的场景名，避免手打字符串打错
-        map1Button.onClick.AddListener(() => SelectMap(Constants.GameSceneName1));
         backButton.onClick.AddListener(() => lobbyUI.ShowMainPanel());
-
-        // 2. 打开面板时，把当前已选的地图显示出来
-        selectedMapText.text = "当前已选：" + ToDisplayName(lobbyManager.selectedMapName);
+        BuildCards();
     }
 
-    // 选中一张地图：1. 记进 LobbyManager  2. 立刻给玩家文字反馈
+    // 按 MapCatalog 生成卡片；默认选中当前存档里的地图，没有就选第一张
+    private void BuildCards()
+    {
+        for (int i = 0; i < cards.Count; i++)
+            if (cards[i] != null) Destroy(cards[i].gameObject);
+        cards.Clear();
+
+        if (mapCatalog == null || mapCatalog.Count == 0)
+        {
+            selectedMapText.text = "未配置地图";
+            Debug.LogError("MapSelectPanel：MapCatalog 没有地图数据");
+            return;
+        }
+
+        for (int i = 0; i < mapCatalog.Count; i++)
+        {
+            MapCatalog.MapEntry entry = mapCatalog.Get(i);
+            if (entry == null || string.IsNullOrEmpty(entry.sceneName)) continue;
+
+            MapCardUI card = Instantiate(mapCardPrefab, mapCardsContent, false);
+            MapCatalog.MapEntry captured = entry;
+            card.Bind(captured, () => SelectMap(captured.sceneName));
+            cards.Add(card);
+        }
+
+        string initial = (lobbyManager != null) ? lobbyManager.selectedMapName : "";
+        if (mapCatalog.Find(initial) == null) initial = mapCatalog.Get(0).sceneName;
+
+        SelectMap(initial);
+    }
+
+    // 选中一张地图：记进 LobbyManager + 更新文字 + 更新所有卡片的选中叠层
     private void SelectMap(string sceneName)
     {
-        lobbyManager.SelectMap(sceneName);
-        selectedMapText.text = "当前已选：" + ToDisplayName(sceneName);
-    }
+        MapCatalog.MapEntry entry = mapCatalog.Find(sceneName);
+        if (entry == null) return;
 
-    // 把场景名翻译成给人看的名字（以后加地图在这里加一行）
-    private string ToDisplayName(string sceneName)
-    {
-        if (sceneName == Constants.GameSceneName1) return "地图1（map1）";
-        return sceneName;   // 没登记过的就原样显示场景名
+        lobbyManager.SelectMap(sceneName);
+        selectedMapText.text = "当前已选：" + entry.displayName;
+
+        for (int i = 0; i < cards.Count; i++)
+        {
+            if (cards[i] == null) continue;
+            cards[i].SetSelected(cards[i].SceneName == sceneName);
+        }
     }
 
     private bool CheckRefs()
     {
         if (lobbyUI == null) { Debug.LogError("MapSelectPanel：lobbyUI 未赋值"); return false; }
         if (lobbyManager == null) { Debug.LogError("MapSelectPanel：lobbyManager 未赋值"); return false; }
-        if (map1Button == null) { Debug.LogError("MapSelectPanel：map1Button 未赋值"); return false; }
-        if (backButton == null) { Debug.LogError("MapSelectPanel：backButton 未赋值"); return false; }
+        if (mapCatalog == null) { Debug.LogError("MapSelectPanel：mapCatalog 未赋值"); return false; }
+        if (mapCardsContent == null) { Debug.LogError("MapSelectPanel：mapCardsContent 未赋值"); return false; }
+        if (mapCardPrefab == null) { Debug.LogError("MapSelectPanel：mapCardPrefab 未赋值"); return false; }
         if (selectedMapText == null) { Debug.LogError("MapSelectPanel：selectedMapText 未赋值"); return false; }
+        if (backButton == null) { Debug.LogError("MapSelectPanel：backButton 未赋值"); return false; }
         return true;
     }
 }

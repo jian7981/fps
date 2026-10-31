@@ -11,14 +11,16 @@ public static class SettingsManager
     private const string KeyMouseSensitivity = "settings_mouse_sensitivity";
     private const string KeyMasterVolume = "settings_master_volume";
     private const string KeyRifleScopeSensitivity = "settings_rifle_scope_sensitivity";     // 【新功能】
-    private const string KeySniperScopeSensitivity = "settings_sniper_scope_sensitivity";   // 【新功能】
+    private const string KeySniperScopeSensitivitySmall = "settings_sniper_scope_sensitivity";       // 复用旧键：旧值就是"小倍率"
+    private const string KeySniperScopeSensitivityLarge = "settings_sniper_scope_sensitivity_large"; // 新增：大倍率
 
     // ---- 默认值（第一次进游戏、还没存过档时用）----
     public const float DefaultMouseSensitivity = 200f;   // 和 PlayerLook 原来的默认值保持一致
     public const float DefaultVolume = 0.8f;
     // 【新功能】开镜灵敏度默认值 = 旧手感（旧逻辑：200 × aimSensitivityScale，步枪 0.6 / 狙击 0.35）
     public const float DefaultRifleScopeSensitivity = 120f;
-    public const float DefaultSniperScopeSensitivity = 70f;
+    public const float DefaultSniperScopeSensitivitySmall = 70f;
+    public const float DefaultSniperScopeSensitivityLarge = 45f;
 
     // ---- 鼠标灵敏度的可调范围（设置界面的滑条也用它俩）----
     public const float MinMouseSensitivity = 50f;
@@ -50,15 +52,32 @@ public static class SettingsManager
         }
     }
 
-    // ---- 【新功能】狙击枪开镜灵敏度（同上）----
-    public static float SniperScopeSensitivity
+    // ---- 【7.5】狙击枪开镜灵敏度：小倍率 / 大倍率（旧键留给小倍率，老存档不丢）----
+    public static float SniperScopeSensitivitySmall
     {
-        get { return DataManager.Store.GetFloat(KeySniperScopeSensitivity, DefaultSniperScopeSensitivity); }
+        get { return DataManager.Store.GetFloat(KeySniperScopeSensitivitySmall, DefaultSniperScopeSensitivitySmall); }
         set
         {
             float clamped = Mathf.Clamp(value, MinScopeSensitivity, MaxScopeSensitivity);
-            DataManager.Store.SetFloat(KeySniperScopeSensitivity, clamped);
+            DataManager.Store.SetFloat(KeySniperScopeSensitivitySmall, clamped);
         }
+    }
+
+    public static float SniperScopeSensitivityLarge
+    {
+        get { return DataManager.Store.GetFloat(KeySniperScopeSensitivityLarge, DefaultSniperScopeSensitivityLarge); }
+        set
+        {
+            float clamped = Mathf.Clamp(value, MinScopeSensitivity, MaxScopeSensitivity);
+            DataManager.Store.SetFloat(KeySniperScopeSensitivityLarge, clamped);
+        }
+    }
+
+    // 旧代码兼容：原"狙击开镜灵敏度"就是小倍率
+    public static float SniperScopeSensitivity
+    {
+        get { return SniperScopeSensitivitySmall; }
+        set { SniperScopeSensitivitySmall = value; }
     }
 
     // ---- 主音量：读存档；写的时候夹到 0~1 并立刻应用 ----
@@ -85,6 +104,8 @@ public static class SettingsManager
     {
         AudioListener.volume = MasterVolume;             // 音量是全局静态值，这里设一次全程有效
         Debug.Log("[设置] 启动读取存档：音量 " + MasterVolume + "｜灵敏度 " + MouseSensitivity
-                  + "｜步枪开镜 " + RifleScopeSensitivity + "｜狙击开镜 " + SniperScopeSensitivity);
+                  + "｜步枪开镜 " + RifleScopeSensitivity
+                  + "｜狙击小倍率 " + SniperScopeSensitivitySmall
+                  + "｜狙击大倍率 " + SniperScopeSensitivityLarge);
     }
 }

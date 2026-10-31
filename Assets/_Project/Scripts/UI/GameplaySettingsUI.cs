@@ -17,6 +17,14 @@ public class GameplaySettingsUI : MonoBehaviour
     // 给 PlayerLook / WeaponController / PlayerMotor 读的全局开关（静态，跨脚本通信）
     public static bool IsOpen { get; private set; }
 
+    [System.Serializable]
+    public class SettingsTab
+    {
+        public Button button;
+        public GameObject page;
+        public GameObject selectedMark;
+    }
+
     [Header("引用")]
     public GameObject panel;                      // 设置面板根物体
     public Slider volumeSlider;                   // 主音量
@@ -25,10 +33,18 @@ public class GameplaySettingsUI : MonoBehaviour
     public TextMeshProUGUI globalSensitivityText; // 全局灵敏度数值（可选）
     public Slider rifleScopeSlider;               // 步枪开镜灵敏度
     public TextMeshProUGUI rifleScopeText;        // （可选）
-    public Slider sniperScopeSlider;              // 狙击枪开镜灵敏度
-    public TextMeshProUGUI sniperScopeText;       // （可选）
+    public Slider sniperScopeSmallSlider;         // 【7.5】狙击小倍率
+    public TextMeshProUGUI sniperScopeSmallText;
+    public Slider sniperScopeLargeSlider;         // 【7.5】狙击大倍率
+    public TextMeshProUGUI sniperScopeLargeText;
     public Button closeButton;                    // 面板上的"关闭"按钮（可选）
     public Button exitMatchButton;                // 【新功能】退出对局：不想玩的玩家直接回大厅（客机=自己退出、其他人继续打；主机=解散房间；单机=回大厅组队界面）
+
+    [Header("左侧分页（7.5：基础设置 / 灵敏度设置）")]
+    public SettingsTab[] tabs;
+    public int defaultTab = 0;
+    public Color tabNormalColor = new Color(1f, 1f, 1f, 0.5f);
+    public Color tabSelectedColor = Color.white;
 
     private bool loading;   // 载入滑条值时屏蔽回调（避免"初始化赋值→误触发保存"）
 
@@ -50,11 +66,17 @@ public class GameplaySettingsUI : MonoBehaviour
             rifleScopeSlider.maxValue = SettingsManager.MaxScopeSensitivity;
             rifleScopeSlider.wholeNumbers = true;
         }
-        if (sniperScopeSlider != null)
+        if (sniperScopeSmallSlider != null)
         {
-            sniperScopeSlider.minValue = SettingsManager.MinScopeSensitivity;
-            sniperScopeSlider.maxValue = SettingsManager.MaxScopeSensitivity;
-            sniperScopeSlider.wholeNumbers = true;
+            sniperScopeSmallSlider.minValue = SettingsManager.MinScopeSensitivity;
+            sniperScopeSmallSlider.maxValue = SettingsManager.MaxScopeSensitivity;
+            sniperScopeSmallSlider.wholeNumbers = true;
+        }
+        if (sniperScopeLargeSlider != null)
+        {
+            sniperScopeLargeSlider.minValue = SettingsManager.MinScopeSensitivity;
+            sniperScopeLargeSlider.maxValue = SettingsManager.MaxScopeSensitivity;
+            sniperScopeLargeSlider.wholeNumbers = true;
         }
 
         // 载入当前值（先赋值、后绑事件）
@@ -62,7 +84,8 @@ public class GameplaySettingsUI : MonoBehaviour
         if (volumeSlider != null) volumeSlider.value = SettingsManager.MasterVolume;
         if (globalSensitivitySlider != null) globalSensitivitySlider.value = SettingsManager.MouseSensitivity;
         if (rifleScopeSlider != null) rifleScopeSlider.value = SettingsManager.RifleScopeSensitivity;
-        if (sniperScopeSlider != null) sniperScopeSlider.value = SettingsManager.SniperScopeSensitivity;
+        if (sniperScopeSmallSlider != null) sniperScopeSmallSlider.value = SettingsManager.SniperScopeSensitivitySmall;
+        if (sniperScopeLargeSlider != null) sniperScopeLargeSlider.value = SettingsManager.SniperScopeSensitivityLarge;
         loading = false;
         RefreshTexts();
 
@@ -70,12 +93,44 @@ public class GameplaySettingsUI : MonoBehaviour
         if (volumeSlider != null) volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
         if (globalSensitivitySlider != null) globalSensitivitySlider.onValueChanged.AddListener(OnGlobalSensitivityChanged);
         if (rifleScopeSlider != null) rifleScopeSlider.onValueChanged.AddListener(OnRifleScopeChanged);
-        if (sniperScopeSlider != null) sniperScopeSlider.onValueChanged.AddListener(OnSniperScopeChanged);
+        if (sniperScopeSmallSlider != null) sniperScopeSmallSlider.onValueChanged.AddListener(OnSniperSmallChanged);
+        if (sniperScopeLargeSlider != null) sniperScopeLargeSlider.onValueChanged.AddListener(OnSniperLargeChanged);
         if (closeButton != null) closeButton.onClick.AddListener(Close);
         if (exitMatchButton != null) exitMatchButton.onClick.AddListener(OnExitMatchClicked);   // 【新功能】退出对局（回大厅）
 
+        // 【7.5】左侧分页
+        if (tabs != null)
+        {
+            for (int i = 0; i < tabs.Length; i++)
+            {
+                SettingsTab tab = tabs[i];
+                if (tab == null || tab.button == null) continue;
+                int index = i;
+                tab.button.onClick.AddListener(() => SelectTab(index));
+            }
+        }
+        SelectTab(defaultTab);
+
         panel.SetActive(false);
         IsOpen = false;
+    }
+
+    // 【7.5】切页
+    public void SelectTab(int index)
+    {
+        if (tabs == null || tabs.Length == 0) return;
+        index = Mathf.Clamp(index, 0, tabs.Length - 1);
+
+        for (int i = 0; i < tabs.Length; i++)
+        {
+            SettingsTab tab = tabs[i];
+            if (tab == null) continue;
+            bool on = (i == index);
+            if (tab.page != null) tab.page.SetActive(on);
+            if (tab.selectedMark != null) tab.selectedMark.SetActive(on);
+            if (tab.button != null && tab.button.targetGraphic != null)
+                tab.button.targetGraphic.color = on ? tabSelectedColor : tabNormalColor;
+        }
     }
 
     private void Update()
@@ -97,6 +152,7 @@ public class GameplaySettingsUI : MonoBehaviour
     {
         panel.SetActive(true);
         IsOpen = true;
+        SelectTab(defaultTab);   // 每次打开回到默认页
 
         // 解锁鼠标（能点滑条），但游戏世界不被暂停（不动 Time.timeScale）
         Cursor.lockState = CursorLockMode.None;
@@ -177,10 +233,17 @@ public class GameplaySettingsUI : MonoBehaviour
         RefreshTexts();
     }
 
-    private void OnSniperScopeChanged(float value)
+    private void OnSniperSmallChanged(float value)
     {
         if (loading) return;
-        SettingsManager.SniperScopeSensitivity = value;
+        SettingsManager.SniperScopeSensitivitySmall = value;
+        RefreshTexts();
+    }
+
+    private void OnSniperLargeChanged(float value)
+    {
+        if (loading) return;
+        SettingsManager.SniperScopeSensitivityLarge = value;
         RefreshTexts();
     }
 
@@ -193,7 +256,9 @@ public class GameplaySettingsUI : MonoBehaviour
             globalSensitivityText.text = Mathf.RoundToInt(globalSensitivitySlider.value).ToString();
         if (rifleScopeText != null && rifleScopeSlider != null)
             rifleScopeText.text = Mathf.RoundToInt(rifleScopeSlider.value).ToString();
-        if (sniperScopeText != null && sniperScopeSlider != null)
-            sniperScopeText.text = Mathf.RoundToInt(sniperScopeSlider.value).ToString();
+        if (sniperScopeSmallText != null && sniperScopeSmallSlider != null)
+            sniperScopeSmallText.text = Mathf.RoundToInt(sniperScopeSmallSlider.value).ToString();
+        if (sniperScopeLargeText != null && sniperScopeLargeSlider != null)
+            sniperScopeLargeText.text = Mathf.RoundToInt(sniperScopeLargeSlider.value).ToString();
     }
 }

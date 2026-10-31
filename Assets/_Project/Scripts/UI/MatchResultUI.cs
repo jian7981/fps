@@ -1,4 +1,4 @@
-using System.Collections;           // IEnumerator（经验结算超时等待）
+﻿using System.Collections;           // IEnumerator（经验结算超时等待）
 using System.Collections.Generic;   // List<>
 using UnityEngine;
 using UnityEngine.UI;               // Button
@@ -139,7 +139,7 @@ public class MatchResultUI : MonoBehaviour
         }
 
         bool won = (winnerTeamId == myTeam);
-        titleText.text = won ? "胜利！" : "失败…";
+        titleText.text = won ? "胜利" : "失败";
         if (victoryRoot != null) victoryRoot.SetActive(won);
         if (defeatRoot != null) defeatRoot.SetActive(!won);
 

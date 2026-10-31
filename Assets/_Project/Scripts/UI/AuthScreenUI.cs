@@ -27,8 +27,13 @@ public class AuthScreenUI : MonoBehaviour
     public Button registerButton;
     public Button enterGameButton;        // 登录成功后才可点
     public Button logoutButton;
+    public Button quitGameButton;         // 【7.5】退出游戏（编辑器里 = 停止 Play）
     public TMP_Text statusText;           // 未登录区的提示行
     public TMP_Text profileText;          // 已登录区的资料行
+
+    [Header("已登录卡头像（可选，7.5）")]
+    public Image loggedInAvatar;          // loggedin_card_bg 里的头像
+    public AvatarLibrary avatarLibrary;   // 预设头像库
 
     private bool busy;                    // 请求进行中：防连点
 
@@ -41,6 +46,7 @@ public class AuthScreenUI : MonoBehaviour
         if (registerButton != null) registerButton.onClick.AddListener(OnRegisterClicked);
         if (enterGameButton != null) enterGameButton.onClick.AddListener(OnEnterGameClicked);
         if (logoutButton != null) logoutButton.onClick.AddListener(OnLogoutClicked);
+        if (quitGameButton != null) quitGameButton.onClick.AddListener(GameQuit.Quit);
 
         // 密码框设成密码模式（显示成圆点），省得在 Inspector 里自己找
         if (passwordInput != null) passwordInput.contentType = TMP_InputField.ContentType.Password;
@@ -190,6 +196,14 @@ public class AuthScreenUI : MonoBehaviour
                 : (profile != null
                     ? AuthService.CurrentNickname + "　Lv." + profile.level + "　经验 " + profile.exp
                     : AuthService.CurrentNickname);
+        }
+
+        // 【7.5】已登录卡头像
+        if (loggedInAvatar != null)
+        {
+            Sprite sprite = (avatarLibrary != null) ? avatarLibrary.Get(AuthService.CurrentAvatarId) : null;
+            loggedInAvatar.sprite = sprite;
+            loggedInAvatar.enabled = (sprite != null);
         }
 
         // 提示行：只在"空着"的时候补默认提示，别覆盖掉刚写上去的错误原因

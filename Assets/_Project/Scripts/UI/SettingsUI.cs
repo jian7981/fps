@@ -7,6 +7,14 @@ using TMPro;                         // TextMeshProUGUI
 // 挂载：Lobby 场景的 SettingsPanel 上
 public class SettingsUI : MonoBehaviour
 {
+    [System.Serializable]
+    public class SettingsTab
+    {
+        public Button button;        // 左侧导航按钮
+        public GameObject page;      // 这一页的根物体
+        public GameObject selectedMark; // 选中高亮条（可留空）
+    }
+
     [Header("引用")]
     public LobbyUI lobbyUI;                        // 点返回时切回主界面（拖 Canvas）
     public Slider sensitivitySlider;               // 鼠标灵敏度滑条（全局）
@@ -15,17 +23,28 @@ public class SettingsUI : MonoBehaviour
     public TextMeshProUGUI volumeValueText;        // 音量数值文字（比如 "80%"）
     public Button backButton;                      // 【返回】按钮
 
+    [Header("退出游戏（7.5）")]
+    public Button quitGameButton;                  // 退出整个客户端（编辑器里 = 停止 Play）
+
+    [Header("左侧分页（7.5：基础设置 / 灵敏度设置）")]
+    public SettingsTab[] tabs;
+    public int defaultTab = 0;
+    public Color tabNormalColor = new Color(1f, 1f, 1f, 0.5f);
+    public Color tabSelectedColor = Color.white;
+
     [Header("【阶段4-F】账号（没配 -lobbyserver 时自动隐藏这个按钮）")]
     [Tooltip("「退出登录」按钮（放在设置面板里）。留空 = 不做这个功能")]
     public Button logoutButton;
     [Tooltip("账号界面（挂在大厅 Canvas 上的 AuthScreenUI）。点「退出登录」后用它切到登录 / 注册界面")]
     public AuthScreenUI authScreen;
 
-    [Header("【新功能】开镜灵敏度（滑条不拖也能用，没做的先留空）")]
+    [Header("【7.5】开镜灵敏度（滑条不拖也能用，没做的先留空）")]
     public Slider rifleScopeSlider;                     // 步枪开镜灵敏度滑条
     public TextMeshProUGUI rifleScopeValueText;         // 数值文字（可选）
-    public Slider sniperScopeSlider;                    // 狙击枪开镜灵敏度滑条
-    public TextMeshProUGUI sniperScopeValueText;        // 数值文字（可选）
+    public Slider sniperScopeSmallSlider;               // 狙击枪小倍率开镜灵敏度
+    public TextMeshProUGUI sniperScopeSmallValueText;
+    public Slider sniperScopeLargeSlider;               // 狙击枪大倍率开镜灵敏度
+    public TextMeshProUGUI sniperScopeLargeValueText;
 
     private void Start()
     {
@@ -45,11 +64,17 @@ public class SettingsUI : MonoBehaviour
             rifleScopeSlider.maxValue = SettingsManager.MaxScopeSensitivity;
             rifleScopeSlider.wholeNumbers = true;
         }
-        if (sniperScopeSlider != null)
+        if (sniperScopeSmallSlider != null)
         {
-            sniperScopeSlider.minValue = SettingsManager.MinScopeSensitivity;
-            sniperScopeSlider.maxValue = SettingsManager.MaxScopeSensitivity;
-            sniperScopeSlider.wholeNumbers = true;
+            sniperScopeSmallSlider.minValue = SettingsManager.MinScopeSensitivity;
+            sniperScopeSmallSlider.maxValue = SettingsManager.MaxScopeSensitivity;
+            sniperScopeSmallSlider.wholeNumbers = true;
+        }
+        if (sniperScopeLargeSlider != null)
+        {
+            sniperScopeLargeSlider.minValue = SettingsManager.MinScopeSensitivity;
+            sniperScopeLargeSlider.maxValue = SettingsManager.MaxScopeSensitivity;
+            sniperScopeLargeSlider.wholeNumbers = true;
         }
 
         // 2. 先把滑条显示成存档里的当前值
@@ -57,15 +82,31 @@ public class SettingsUI : MonoBehaviour
         sensitivitySlider.value = SettingsManager.MouseSensitivity;
         volumeSlider.value = SettingsManager.MasterVolume;
         if (rifleScopeSlider != null) rifleScopeSlider.value = SettingsManager.RifleScopeSensitivity;
-        if (sniperScopeSlider != null) sniperScopeSlider.value = SettingsManager.SniperScopeSensitivity;
+        if (sniperScopeSmallSlider != null) sniperScopeSmallSlider.value = SettingsManager.SniperScopeSensitivitySmall;
+        if (sniperScopeLargeSlider != null) sniperScopeLargeSlider.value = SettingsManager.SniperScopeSensitivityLarge;
         RefreshText();
 
         // 3. 绑定滑条和按钮（代码绑，Inspector 里的 OnClick 留空）
         sensitivitySlider.onValueChanged.AddListener(OnSensitivityChanged);
         volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
         if (rifleScopeSlider != null) rifleScopeSlider.onValueChanged.AddListener(OnRifleScopeChanged);
-        if (sniperScopeSlider != null) sniperScopeSlider.onValueChanged.AddListener(OnSniperScopeChanged);
+        if (sniperScopeSmallSlider != null) sniperScopeSmallSlider.onValueChanged.AddListener(OnSniperSmallChanged);
+        if (sniperScopeLargeSlider != null) sniperScopeLargeSlider.onValueChanged.AddListener(OnSniperLargeChanged);
         backButton.onClick.AddListener(OnBackClicked);
+        if (quitGameButton != null) quitGameButton.onClick.AddListener(GameQuit.Quit);
+
+        // 【7.5】左侧分页
+        if (tabs != null)
+        {
+            for (int i = 0; i < tabs.Length; i++)
+            {
+                SettingsTab tab = tabs[i];
+                if (tab == null || tab.button == null) continue;
+                int index = i;
+                tab.button.onClick.AddListener(() => SelectTab(index));
+            }
+        }
+        SelectTab(defaultTab);
 
         // 【阶段4-F】设置面板里的「退出登录」
         if (logoutButton != null) logoutButton.onClick.AddListener(OnLogoutClicked);
@@ -77,6 +118,25 @@ public class SettingsUI : MonoBehaviour
     private void OnEnable()
     {
         RefreshLogoutButton();
+        if (tabs != null && tabs.Length > 0) SelectTab(defaultTab);
+    }
+
+    // 【7.5】切页：只显示当前页，选中标记/按钮颜色跟着换
+    public void SelectTab(int index)
+    {
+        if (tabs == null || tabs.Length == 0) return;
+        index = Mathf.Clamp(index, 0, tabs.Length - 1);
+
+        for (int i = 0; i < tabs.Length; i++)
+        {
+            SettingsTab tab = tabs[i];
+            if (tab == null) continue;
+            bool on = (i == index);
+            if (tab.page != null) tab.page.SetActive(on);
+            if (tab.selectedMark != null) tab.selectedMark.SetActive(on);
+            if (tab.button != null && tab.button.targetGraphic != null)
+                tab.button.targetGraphic.color = on ? tabSelectedColor : tabNormalColor;
+        }
     }
 
     // 【新增，4-F】「退出登录」：登出 + 切到登录 / 注册界面（必须重新登录才回得到已登录区）
@@ -119,10 +179,17 @@ public class SettingsUI : MonoBehaviour
         RefreshText();
     }
 
-    // 【新功能】狙击枪开镜灵敏度
-    private void OnSniperScopeChanged(float value)
+    // 【7.5】狙击枪小倍率
+    private void OnSniperSmallChanged(float value)
     {
-        SettingsManager.SniperScopeSensitivity = value;
+        SettingsManager.SniperScopeSensitivitySmall = value;
+        RefreshText();
+    }
+
+    // 【7.5】狙击枪大倍率
+    private void OnSniperLargeChanged(float value)
+    {
+        SettingsManager.SniperScopeSensitivityLarge = value;
         RefreshText();
     }
 
@@ -148,8 +215,10 @@ public class SettingsUI : MonoBehaviour
         // 【新功能】开镜灵敏度数值（没拖文字就不刷新）
         if (rifleScopeValueText != null && rifleScopeSlider != null)
             rifleScopeValueText.text = Mathf.RoundToInt(rifleScopeSlider.value).ToString();
-        if (sniperScopeValueText != null && sniperScopeSlider != null)
-            sniperScopeValueText.text = Mathf.RoundToInt(sniperScopeSlider.value).ToString();
+        if (sniperScopeSmallValueText != null && sniperScopeSmallSlider != null)
+            sniperScopeSmallValueText.text = Mathf.RoundToInt(sniperScopeSmallSlider.value).ToString();
+        if (sniperScopeLargeValueText != null && sniperScopeLargeSlider != null)
+            sniperScopeLargeValueText.text = Mathf.RoundToInt(sniperScopeLargeSlider.value).ToString();
     }
 
     // 引用自检：缺哪个就报哪个

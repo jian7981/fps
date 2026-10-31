@@ -83,9 +83,17 @@ public class PlayerLook : NetworkBehaviour
         float sens = SettingsManager.MouseSensitivity;
         if (weapons != null && weapons.IsAiming && weapons.CurrentWeapon != null)
         {
-            sens = (weapons.CurrentWeapon.weaponType == WeaponType.Sniper)
-                ? SettingsManager.SniperScopeSensitivity
-                : SettingsManager.RifleScopeSensitivity;
+            if (weapons.CurrentWeapon.weaponType == WeaponType.Sniper)
+            {
+                // 【7.5】狙击镜两档倍率：0 = 小倍率，1+ = 大倍率
+                sens = (weapons.ZoomLevel >= 1)
+                    ? SettingsManager.SniperScopeSensitivityLarge
+                    : SettingsManager.SniperScopeSensitivitySmall;
+            }
+            else
+            {
+                sens = SettingsManager.RifleScopeSensitivity;
+            }
         }
 
         float mouseX = Input.GetAxis("Mouse X") * sens * Time.deltaTime;
